@@ -17,6 +17,9 @@ export type Leg = {
   distance: number | null;
   speed: number | null;
   warning: string | null;
+  uncertain: boolean;
+  notes: { id: string; reason: string }[];
+  elapsed: number;
 };
 const KX = 111320 * Math.cos((-32.17 * Math.PI) / 180);
 const KY = 110950;
@@ -207,6 +210,7 @@ export const streets = {
 export function buildRoutes(
   targets: Record<string, any>[],
   entries: Record<string, any>[],
+  routeNotes: Record<string, any>[] = [],
 ) {
   return targets.map((target) => {
     const captures = entries
@@ -232,6 +236,30 @@ export function buildRoutes(
         b = captures[i];
       const p = center(a),
         q = center(b);
+      const elapsed =
+        (Date.parse(b.payload.at) - Date.parse(a.payload.at)) / 1000;
+      const notes = routeNotes.filter(
+        (n) =>
+          n.active &&
+          n.target_id === target.id &&
+          ((Date.parse(b.payload.at) > new Date(n.starts_at).getTime() &&
+            Date.parse(a.payload.at) < new Date(n.ends_at).getTime()) ||
+            (n.from_entry_id === a.id && n.to_entry_id === b.id)),
+      );
+      if (notes.length) {
+        legs.push({
+          from: a.id,
+          to: b.id,
+          coordinates: [],
+          distance: null,
+          speed: null,
+          uncertain: true,
+          elapsed,
+          notes: notes.map((n) => ({ id: n.id, reason: n.reason })),
+          warning: `Recorrido incierto: ${notes.map((n) => n.reason).join(" · ")}`,
+        });
+        continue;
+      }
       const spread = [a, b].some((e) => {
         const c = graph.project(center(e));
         return e.payload.cameras.some((camera: any) => {
@@ -243,8 +271,6 @@ export function buildRoutes(
         ? null
         : graph.route(p, q, false, target.kind === "persona") ||
           graph.route(p, q, true, target.kind === "persona");
-      const elapsed =
-        (Date.parse(b.payload.at) - Date.parse(a.payload.at)) / 1000;
       const speed =
         route && elapsed > 0 ? (route.distance / elapsed) * 3.6 : null;
       const warnings: string[] = [];
@@ -265,6 +291,9 @@ export function buildRoutes(
         distance: route?.distance ?? null,
         speed,
         warning: warnings.join(" · ") || null,
+        uncertain: false,
+        notes: [],
+        elapsed,
       });
     }
     return {

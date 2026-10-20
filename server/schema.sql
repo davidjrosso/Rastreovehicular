@@ -57,3 +57,14 @@ CREATE TABLE IF NOT EXISTS notices (
   case_id UUID REFERENCES cases(id), text TEXT NOT NULL, read BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS route_notes (
+  id UUID PRIMARY KEY, case_id UUID NOT NULL REFERENCES cases(id),
+  target_id UUID NOT NULL REFERENCES targets(id),
+  from_entry_id UUID NOT NULL REFERENCES entries(id),
+  to_entry_id UUID NOT NULL REFERENCES entries(id),
+  starts_at TIMESTAMPTZ NOT NULL, ends_at TIMESTAMPTZ NOT NULL,
+  reason TEXT NOT NULL, user_id UUID NOT NULL REFERENCES users(id),
+  active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (ends_at >= starts_at)
+);
+CREATE INDEX IF NOT EXISTS route_notes_case ON route_notes(case_id);

@@ -186,13 +186,11 @@ export async function createApp(
   });
   app.setErrorHandler((error: any, req, reply) => {
     if (error instanceof ZodError)
-      return reply
-        .code(400)
-        .send({
-          error: error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join(" · "),
-        });
+      return reply.code(400).send({
+        error: error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join(" · "),
+      });
     if (error.code === "23505")
       return reply.code(409).send({ error: "Ese registro ya existe" });
     if (error.code === "23503")
@@ -527,23 +525,29 @@ export async function createApp(
   });
   async function detail(caseId: string, user: User) {
     const c = await access(db, caseId, user);
-    const [targets, entries, history, attachments] = await Promise.all([
-      db.query("SELECT * FROM targets WHERE case_id=$1 ORDER BY description", [
-        caseId,
-      ]),
-      db.query(
-        "SELECT e.*,u.name AS author FROM entries e JOIN users u ON u.id=e.user_id WHERE case_id=$1 AND deleted_at IS NULL ORDER BY e.created_at",
-        [caseId],
-      ),
-      db.query(
-        "SELECT a.*,u.name AS author FROM audit a JOIN users u ON u.id=a.user_id WHERE case_id=$1 ORDER BY a.created_at DESC",
-        [caseId],
-      ),
-      db.query(
-        "SELECT a.* FROM attachments a JOIN entries e ON e.id=a.entry_id WHERE a.case_id=$1 AND e.deleted_at IS NULL ORDER BY a.created_at",
-        [caseId],
-      ),
-    ]);
+    const [targets, entries, history, attachments, routeNotes] =
+      await Promise.all([
+        db.query(
+          "SELECT * FROM targets WHERE case_id=$1 ORDER BY description",
+          [caseId],
+        ),
+        db.query(
+          "SELECT e.*,u.name AS author FROM entries e JOIN users u ON u.id=e.user_id WHERE case_id=$1 AND deleted_at IS NULL ORDER BY e.created_at",
+          [caseId],
+        ),
+        db.query(
+          "SELECT a.*,u.name AS author FROM audit a JOIN users u ON u.id=a.user_id WHERE case_id=$1 ORDER BY a.created_at DESC",
+          [caseId],
+        ),
+        db.query(
+          "SELECT a.* FROM attachments a JOIN entries e ON e.id=a.entry_id WHERE a.case_id=$1 AND e.deleted_at IS NULL ORDER BY a.created_at",
+          [caseId],
+        ),
+        db.query(
+          "SELECT n.*,u.name AS author FROM route_notes n JOIN users u ON u.id=n.user_id WHERE n.case_id=$1 ORDER BY n.created_at",
+          [caseId],
+        ),
+      ]);
     return {
       ...c,
       number: String(c.number),
@@ -551,12 +555,117 @@ export async function createApp(
       entries: entries.rows,
       history: history.rows,
       attachments: attachments.rows,
-      routes: buildRoutes(targets.rows, entries.rows),
+      route_notes: routeNotes.rows,
+      routes: buildRoutes(targets.rows, entries.rows, routeNotes.rows),
     };
   }
   app.get("/api/cases/:id", async (req) =>
     detail((req.params as any).id, req.user),
   );
+  app.post("/api/cases/:id/route-notes", async (req) => {
+    const caseId = (req.params as any).id;
+    const input = z
+      .object({
+        target_id: id,
+        from_entry_id: id,
+        to_entry_id: id,
+        reason: text.max(2000),
+      })
+      .parse(req.body);
+    const noteId = randomUUID();
+    await db.transaction(async (tx) => {
+      const c = await access(tx, caseId, req.user, true);
+      if (!isStaff(req.user) || c.status !== "en_curso")
+        fail(
+          403,
+          "Sólo la sala puede modificar recorridos de búsquedas en curso",
+        );
+      const targets = (
+        await tx.query("SELECT * FROM targets WHERE id=$1 AND case_id=$2", [
+          input.target_id,
+          caseId,
+        ])
+      ).rows;
+      if (!targets.length) fail(400, "Objetivo ajeno a la búsqueda");
+      const entries = (
+        await tx.query(
+          "SELECT * FROM entries WHERE case_id=$1 AND kind='captura' AND deleted_at IS NULL ORDER BY created_at",
+          [caseId],
+        )
+      ).rows;
+      const route = buildRoutes(targets, entries)[0];
+      if (
+        !route.legs.some(
+          (l) => l.from === input.from_entry_id && l.to === input.to_entry_id,
+        )
+      )
+        fail(
+          409,
+          "Las capturas del tramo cambiaron. Actualizá la búsqueda y elegí el tramo nuevamente.",
+        );
+      const from = entries.find((e) => e.id === input.from_entry_id)!,
+        to = entries.find((e) => e.id === input.to_entry_id)!;
+      const previous = (
+        await tx.query(
+          "SELECT id FROM route_notes WHERE target_id=$1 AND from_entry_id=$2 AND to_entry_id=$3 AND active=true",
+          [input.target_id, from.id, to.id],
+        )
+      ).rows;
+      if (previous.length) fail(409, "Ese tramo ya está marcado como incierto");
+      await tx.query(
+        "INSERT INTO route_notes(id,case_id,target_id,from_entry_id,to_entry_id,starts_at,ends_at,reason,user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        [
+          noteId,
+          caseId,
+          input.target_id,
+          from.id,
+          to.id,
+          from.payload.at,
+          to.payload.at,
+          input.reason,
+          req.user.id,
+        ],
+      );
+      await audit(tx, req.user, caseId, "route_uncertain", {
+        note_id: noteId,
+        ...input,
+        from_at: from.payload.at,
+        to_at: to.payload.at,
+      });
+      await tx.query("UPDATE cases SET updated_at=now() WHERE id=$1", [caseId]);
+    });
+    changed(caseId);
+    return { id: noteId };
+  });
+  app.delete("/api/cases/:id/route-notes/:noteId", async (req) => {
+    const { id: caseId, noteId } = req.params as any;
+    id.parse(noteId);
+    await db.transaction(async (tx) => {
+      const c = await access(tx, caseId, req.user, true);
+      if (!isStaff(req.user) || c.status !== "en_curso")
+        fail(
+          403,
+          "Sólo la sala puede modificar recorridos de búsquedas en curso",
+        );
+      const note = (
+        await tx.query(
+          "SELECT * FROM route_notes WHERE id=$1 AND case_id=$2 AND active=true",
+          [noteId, caseId],
+        )
+      ).rows[0];
+      if (!note) fail(404, "Anotación no encontrada");
+      await tx.query("UPDATE route_notes SET active=false WHERE id=$1", [
+        noteId,
+      ]);
+      await audit(tx, req.user, caseId, "route_uncertainty_removed", {
+        note_id: noteId,
+        reason: note.reason,
+      });
+      await tx.query("UPDATE cases SET updated_at=now() WHERE id=$1", [caseId]);
+    });
+    changed(caseId);
+    return { ok: true };
+  });
   app.post("/api/cases/:id/state", async (req) => {
     const caseId = (req.params as any).id;
     const input = z
@@ -839,6 +948,9 @@ export async function createApp(
           "Sentido",
           "Observación",
           "Operador",
+          "Tipo de registro",
+          "Lugar / dirección",
+          "Incertidumbre del tramo",
         ],
       ];
       for (const e of captures)
@@ -863,6 +975,65 @@ export async function createApp(
           e.payload.direction,
           e.payload.note,
           e.author,
+          "Captura",
+          "",
+          c.routes
+            .flatMap((r) =>
+              r.legs
+                .filter((l) => l.to === e.id && l.uncertain)
+                .map(
+                  (l) =>
+                    `${r.description}: ${l.notes.map((n) => n.reason).join(" · ")}`,
+                ),
+            )
+            .join(" / "),
+        ]);
+      for (const e of c.entries.filter((e) => e.kind === "aporte"))
+        rows.push([
+          c.number,
+          e.payload.at
+            ? new Intl.DateTimeFormat("es-AR", {
+                dateStyle: "short",
+                timeStyle: "medium",
+                hourCycle: "h23",
+                timeZone: "America/Argentina/Cordoba",
+              }).format(new Date(e.payload.at))
+            : "",
+          "",
+          "",
+          "",
+          "",
+          e.payload.text,
+          e.author,
+          e.payload.place_kind === "hecho"
+            ? "Lugar del hecho"
+            : e.payload.place_kind === "camara_particular"
+              ? "Cámara particular"
+              : "Aporte",
+          [
+            e.payload.place_name,
+            e.payload.address,
+            e.payload.lon !== undefined
+              ? `${e.payload.lon}, ${e.payload.lat}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          "",
+        ]);
+      for (const n of c.route_notes.filter((n) => n.active))
+        rows.push([
+          c.number,
+          "",
+          "",
+          c.targets.find((t) => t.id === n.target_id)?.description || "",
+          "",
+          "",
+          n.reason,
+          n.author,
+          "Tramo incierto",
+          `${new Date(n.starts_at).toISOString()} → ${new Date(n.ends_at).toISOString()}`,
+          n.reason,
         ]);
       return reply
         .type("text/csv; charset=utf-8")
@@ -884,10 +1055,22 @@ export async function createApp(
             `<Placemark><name>${xml(r.description)} · recorrido probable</name><LineString><coordinates>${l.coordinates.map((p) => `${p[0]},${p[1]},0`).join(" ")}</coordinates></LineString></Placemark>`,
         ),
     );
+    const places = c.entries
+      .filter((e) => e.kind === "aporte" && e.payload.lon !== undefined)
+      .map(
+        (e) =>
+          `<Placemark><name>${xml(e.payload.place_kind === "hecho" ? "Lugar del hecho" : e.payload.place_kind === "camara_particular" ? "Cámara particular" : "Aporte")} · ${xml(e.payload.place_name)}</name><description>${xml([e.payload.address, e.payload.at, e.payload.text].filter(Boolean).join(" · "))}</description><Point><coordinates>${e.payload.lon},${e.payload.lat},0</coordinates></Point></Placemark>`,
+      );
+    const uncertain = c.route_notes
+      .filter((n) => n.active)
+      .map(
+        (n) =>
+          `<Placemark><name>Recorrido incierto · ${xml(c.targets.find((t) => t.id === n.target_id)?.description)}</name><description>${xml(n.reason)} · ${xml(new Date(n.starts_at).toISOString())} → ${xml(new Date(n.ends_at).toISOString())}</description></Placemark>`,
+      );
     return reply
       .type("application/vnd.google-earth.kml+xml")
       .send(
-        `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xml(c.number)}</name>${points.join("")}${lines.join("")}</Document></kml>`,
+        `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xml(c.number)}</name>${points.join("")}${lines.join("")}${places.join("")}${uncertain.join("")}</Document></kml>`,
       );
   });
   const dist = resolve("dist");

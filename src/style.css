@@ -1980,3 +1980,132 @@ input[type="color"] {
     width: 100%;
   }
 }
+.camera-picker .camera-options {
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid #d9e2dd;
+  border-radius: 7px;
+}
+.camera-options label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border-bottom: 1px solid #edf0ee;
+  cursor: pointer;
+  font-size: 12px;
+}
+.camera-options label:has(input:checked) {
+  background: #edf5f1;
+}
+.camera-options input {
+  width: auto;
+}
+.camera-options strong {
+  white-space: nowrap;
+}
+.selected-cameras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0;
+}
+.selected-cameras button {
+  background: #edf5f1;
+  color: #226452;
+  border: 1px solid #cdded5;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.datetime-field {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.2fr;
+  gap: 10px;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+.datetime-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  min-width: 0;
+}
+.datetime-field input {
+  width: 100%;
+  min-width: 0;
+}
+.datetime-field small {
+  grid-column: 1 / -1;
+  color: #6d7e75;
+  font-size: 11px;
+}
+.place-map .city-map {
+  height: 280px;
+}
+.place-map .map-caption {
+  display: none;
+}
+.contribution-pin.hecho {
+  background: #ae543d;
+}
+.contribution-pin.camara_particular {
+  background: #4d66a7;
+}
+.map-legend {
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+}
+.maplibregl-popup-content {
+  white-space: pre-line;
+}
+.route-legs {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  max-height: 330px;
+  overflow-y: auto;
+}
+.route-leg {
+  padding: 14px;
+  border: 1px solid #dce3df;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+}
+.route-leg.uncertain {
+  border-color: #dbb58e;
+  background: #fffaf3;
+}
+.route-leg > strong,
+.route-leg > small {
+  display: block;
+  margin-bottom: 6px;
+}
+.route-leg > strong i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 7px;
+}
+.route-leg .secondary {
+  padding: 7px 10px;
+  font-size: 11px;
+  margin-top: 8px;
+}
+.route-leg p {
+  margin: 7px 0;
+}
+@media (max-width: 520px) {
+  .datetime-field {
+    grid-template-columns: 1fr 1fr;
+  }
+  .datetime-field label:first-of-type {
+    grid-column: 1 / -1;
+  }
+  .camera-options label {
+    flex-wrap: wrap;
+  }
+}

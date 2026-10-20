@@ -219,6 +219,103 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
   const cap = await req("operador", "POST", `${base}/entries/captura`, capture);
   assert.equal(cap.statusCode, 200, cap.body);
   const captureId = cap.json().id;
+  const second = await req("operador", "POST", `${base}/entries/captura`, {
+    ...capture,
+    camera_ids: [cameras[1].id],
+    at: "2026-10-20T12:35:10-03:00",
+  });
+  assert.equal(second.statusCode, 200, second.body);
+  const routeInput = {
+    target_id: targetId,
+    from_entry_id: captureId,
+    to_entry_id: second.json().id,
+    reason: "Demora de veinte minutos; recorrido desconocido",
+  };
+  assert.equal(
+    (await req("externoa", "POST", `${base}/route-notes`, routeInput))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await req("externob", "POST", `${base}/route-notes`, routeInput))
+      .statusCode,
+    404,
+  );
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/route-notes`, {
+        ...routeInput,
+        to_entry_id: randomUUID(),
+      })
+    ).statusCode,
+    409,
+  );
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/route-notes`, {
+        ...routeInput,
+        reason: " ",
+      })
+    ).statusCode,
+    400,
+  );
+  const uncertain = await req(
+    "operador",
+    "POST",
+    `${base}/route-notes`,
+    routeInput,
+  );
+  assert.equal(uncertain.statusCode, 200, uncertain.body);
+  const noteId = uncertain.json().id;
+  assert.equal(
+    (await req("operador", "POST", `${base}/route-notes`, routeInput))
+      .statusCode,
+    409,
+  );
+  const uncertainDetail = (await req("operador", "GET", base)).json();
+  assert.equal(uncertainDetail.routes[0].legs[0].uncertain, true);
+  assert.equal(uncertainDetail.routes[0].legs[0].elapsed, 1200);
+  assert.deepEqual(uncertainDetail.routes[0].legs[0].coordinates, []);
+  const place = {
+    place_kind: "camara_particular",
+    place_name: "Comercio de prueba",
+    address: "Esquina de prueba",
+    text: "Avistamiento de prueba <sin verificar>",
+    lon: -64.115,
+    lat: -32.174,
+  };
+  assert.equal(
+    (await req("externoa", "POST", `${base}/entries/aporte`, place)).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await req("externoa", "POST", `${base}/entries/aporte`, {
+        ...place,
+        at: capture.at,
+      })
+    ).statusCode,
+    200,
+  );
+  assert.equal(
+    (
+      await req("externoa", "POST", `${base}/entries/aporte`, {
+        ...place,
+        place_kind: "hecho",
+      })
+    ).statusCode,
+    200,
+  );
+  assert.equal(
+    (
+      await req("externoa", "POST", `${base}/entries/aporte`, {
+        place_kind: "hecho",
+        text: "Sin ubicación",
+        place_name: "Sitio",
+      })
+    ).statusCode,
+    400,
+  );
   const revision = await req("operador", "POST", `${base}/entries/revision`, {
     camera_id: cameras[1].id,
     from: input.starts_at,
@@ -280,6 +377,35 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
   assert.equal(csv.statusCode, 200);
   assert.ok(csv.body.includes("20/10/26") || csv.body.includes("20/10/2026"));
   assert.ok(csv.body.includes("12:15:10"));
+  assert.ok(csv.body.includes("Comercio de prueba"));
+  assert.ok(csv.body.includes(routeInput.reason));
+  const exportKml = (await req("externoa", "GET", `${base}/export/kml`)).body;
+  assert.ok(exportKml.includes("Cámara particular"));
+  assert.ok(exportKml.includes("Lugar del hecho"));
+  assert.ok(exportKml.includes("&lt;sin verificar&gt;"));
+  assert.ok(exportKml.includes(routeInput.reason));
+  assert.equal(exportKml.includes("<LineString>"), false);
+  assert.equal(
+    (await req("externoa", "DELETE", `${base}/route-notes/${noteId}`))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await req("externob", "DELETE", `${base}/route-notes/${noteId}`))
+      .statusCode,
+    404,
+  );
+  assert.equal(
+    (await req("operador", "DELETE", `${base}/route-notes/${noteId}`))
+      .statusCode,
+    200,
+  );
+  const restored = (await req("operador", "GET", base)).json();
+  assert.equal(restored.routes[0].legs[0].uncertain, false);
+  assert.equal(restored.route_notes[0].active, false);
+  assert.ok(
+    restored.history.some((h: any) => h.action === "route_uncertainty_removed"),
+  );
   assert.ok(
     (await req("externoa", "GET", `${base}/export/kml`)).body.includes(
       "<Placemark>",
@@ -304,6 +430,11 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
     (await req("operador", "POST", `${base}/entries/captura`, capture))
       .statusCode,
     409,
+  );
+  assert.equal(
+    (await req("operador", "POST", `${base}/route-notes`, routeInput))
+      .statusCode,
+    403,
   );
   assert.equal(
     (await req("admin", "POST", `${base}/state`, { status: "en_curso" }))

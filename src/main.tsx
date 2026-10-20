@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { api, fmt, iso, localTime, roles, states } from "./api";
 import { CityMap } from "./Map";
+import { CameraPicker, DateTimeField, PlaceFields } from "./inputs";
 import "./style.css";
 
 type Row = Record<string, any>;
@@ -760,17 +761,16 @@ function App() {
                   maxLength={200}
                 />
               </Field>
-              <Field label="Desde (hora argentina)">
-                <input
-                  name="starts_at"
-                  type="datetime-local"
-                  step="1"
-                  required
-                />
-              </Field>
-              <Field label="Hasta (hora argentina)">
-                <input name="ends_at" type="datetime-local" step="1" required />
-              </Field>
+              <DateTimeField
+                name="starts_at"
+                label="Desde (hora argentina)"
+                required
+              />
+              <DateTimeField
+                name="ends_at"
+                label="Hasta (hora argentina)"
+                required
+              />
             </div>
           </Form>
         </Modal>
@@ -802,6 +802,8 @@ function CaseDetail({
   const [nextState, setNextState] = useState(""),
     [deleting, setDeleting] = useState<Row | null>(null);
   const [attachmentEntry, setAttachmentEntry] = useState<string | null>(null);
+  const [routeEdit, setRouteEdit] = useState<Row | null>(null);
+  const [removeNote, setRemoveNote] = useState<Row | null>(null);
   const refresh = useCallback(async () => {
     try {
       setDetail(await api(`/cases/${caseId}`));
@@ -883,6 +885,8 @@ function CaseDetail({
     setNextState("");
     setDeleting(null);
     setAttachmentEntry(null);
+    setRouteEdit(null);
+    setRemoveNote(null);
     void refresh();
   };
   const loadAttachment = async (f: FormData) => {
@@ -1038,11 +1042,13 @@ function CaseDetail({
               <Activity size={16} />
               Recorrido probable por objetivo
             </span>
-            <small>Las capturas dudosas se muestran sin unir.</small>
+            <small>
+              Las capturas dudosas y los tramos inciertos se muestran sin unir.
+            </small>
           </div>
           {c.routes.flatMap((r: Row) =>
             r.legs
-              .filter((l: Row) => l.warning)
+              .filter((l: Row) => l.warning && !l.uncertain)
               .map((l: Row, i: number) => (
                 <div key={`${r.target_id}-${i}`} className="route-warning">
                   <CircleHelp size={16} />
@@ -1051,6 +1057,80 @@ function CaseDetail({
                 </div>
               )),
           )}
+          <div className="route-legs">
+            {c.routes.flatMap((r: Row) =>
+              r.legs.map((leg: Row) => {
+                const from = c.entries.find((e: Row) => e.id === leg.from);
+                const to = c.entries.find((e: Row) => e.id === leg.to);
+                const cameraNames = (e: Row) =>
+                  e.payload.cameras
+                    .map((cam: Row) => `CAM-${cam.number}`)
+                    .join(" / ");
+                return (
+                  <article
+                    key={`${r.target_id}-${leg.from}-${leg.to}`}
+                    className={`route-leg ${leg.uncertain ? "uncertain" : ""}`}
+                  >
+                    <strong>
+                      <i style={{ background: r.color }} />
+                      {r.description} · {cameraNames(from)} → {cameraNames(to)}
+                    </strong>
+                    <small>
+                      {fmt(from.payload.at)} → {fmt(to.payload.at)}
+                    </small>
+                    <p>
+                      Tiempo transcurrido: {Math.floor(leg.elapsed / 60)} min{" "}
+                      {leg.elapsed % 60} s
+                      {leg.distance !== null
+                        ? ` · Distancia estimada: ${(leg.distance / 1000).toFixed(2)} km`
+                        : ""}
+                    </p>
+                    {leg.uncertain ? (
+                      <>
+                        <b>Recorrido incierto · sin trazar en el mapa</b>
+                        {leg.notes.map((note: Row) => (
+                          <div key={note.id}>
+                            <p className="preserve">{note.reason}</p>
+                            {staff(user) && working && (
+                              <button
+                                className="secondary"
+                                onClick={() =>
+                                  setRemoveNote(
+                                    c.route_notes.find(
+                                      (n: Row) => n.id === note.id,
+                                    ),
+                                  )
+                                }
+                              >
+                                Quitar esta incertidumbre
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      staff(user) &&
+                      working && (
+                        <button
+                          className="secondary"
+                          onClick={() =>
+                            setRouteEdit({
+                              target_id: r.target_id,
+                              from_entry_id: leg.from,
+                              to_entry_id: leg.to,
+                              description: `${r.description}: ${cameraNames(from)} → ${cameraNames(to)}`,
+                            })
+                          }
+                        >
+                          Marcar recorrido incierto
+                        </button>
+                      )
+                    )}
+                  </article>
+                );
+              }),
+            )}
+          </div>
         </div>
       </div>
       <section className="activity-panel">
@@ -1059,7 +1139,7 @@ function CaseDetail({
             {[
               ["captura", "Cronología", Camera],
               ["revision", "Revisiones", Check],
-              ["aporte", "Aportes", MapPin],
+              ["aporte", "Lugares y aportes", MapPin],
               ["mensaje", "Chat", MessageSquare],
               ["history", "Historial", Clock3],
             ].map(([key, label, Icon]: any) => (
@@ -1079,10 +1159,15 @@ function CaseDetail({
             ))}
           </div>
           {tab === "aporte" && open && (
-            <button className="secondary" onClick={() => setModal("aporte")}>
-              <Plus size={15} />
-              Aportar información
-            </button>
+            <div className="action-row">
+              <button className="primary" onClick={() => setModal("lugar")}>
+                <MapPin size={15} /> Agregar lugar / cámara particular
+              </button>
+              <button className="secondary" onClick={() => setModal("aporte")}>
+                <Plus size={15} />
+                Aportar información
+              </button>
+            </div>
           )}
         </div>
         {tab === "history" ? (
@@ -1102,14 +1187,19 @@ function CaseDetail({
                             ? "Registro eliminado"
                             : h.action === "attachment_created"
                               ? "Adjunto agregado"
-                              : h.action
-                                  .replace("_created", " agregado")
-                                  .replace("captura", "Captura")
-                                  .replace("revision", "Revisión")
-                                  .replace("mensaje", "Mensaje")
-                                  .replace("aporte", "Aporte")}
+                              : h.action === "route_uncertain"
+                                ? "Tramo marcado como incierto"
+                                : h.action === "route_uncertainty_removed"
+                                  ? "Incertidumbre del tramo retirada"
+                                  : h.action
+                                      .replace("_created", " agregado")
+                                      .replace("captura", "Captura")
+                                      .replace("revision", "Revisión")
+                                      .replace("mensaje", "Mensaje")
+                                      .replace("aporte", "Aporte")}
                   </strong>
                   {h.detail.observation && <p>{h.detail.observation}</p>}
+                  {h.detail.reason && <p>{h.detail.reason}</p>}
                   <small>
                     {h.author} · {fmt(h.created_at)}
                   </small>
@@ -1179,6 +1269,24 @@ function CaseDetail({
                             : " · Todos los objetivos"}
                         </p>
                       )}
+                      {tab === "aporte" &&
+                        p.place_kind &&
+                        p.place_kind !== "general" && (
+                          <p>
+                            <b>
+                              {p.place_kind === "hecho"
+                                ? "Lugar del hecho"
+                                : "Cámara particular"}
+                              : {p.place_name}
+                            </b>
+                            {p.address && (
+                              <>
+                                <br />
+                                {p.address}
+                              </>
+                            )}
+                          </p>
+                        )}
                       {p.text && <p className="preserve">{p.text}</p>}
                       {p.at && tab === "aporte" && (
                         <p className="muted">Referencia: {fmt(p.at)}</p>
@@ -1262,6 +1370,65 @@ function CaseDetail({
           />
         )}
       </section>
+      {routeEdit && (
+        <Modal
+          title="Registrar recorrido incierto"
+          close={() => setRouteEdit(null)}
+        >
+          <Form
+            onDone={done}
+            label="Guardar incertidumbre"
+            submit={(f) =>
+              api(`/cases/${caseId}/route-notes`, "POST", {
+                ...routeEdit,
+                reason: formValue(f, "reason"),
+              })
+            }
+          >
+            <p>
+              <b>{routeEdit.description}</b>
+            </p>
+            <p>
+              Las capturas conservan su certeza. El intervalo quedará sin
+              trazado, incluso si después se agregan capturas intermedias, hasta
+              que se retire esta incertidumbre.
+            </p>
+            <Field label="Motivo u observación">
+              <textarea
+                name="reason"
+                required
+                maxLength={2000}
+                placeholder="Ej. Tardó 18 minutos; pudo detenerse o tomar otro recorrido."
+              />
+            </Field>
+          </Form>
+        </Modal>
+      )}
+      {removeNote && (
+        <Modal
+          title="Quitar incertidumbre del recorrido"
+          close={() => setRemoveNote(null)}
+        >
+          <Form
+            onDone={done}
+            label="Volver a estimar el recorrido"
+            submit={() =>
+              api(`/cases/${caseId}/route-notes/${removeNote.id}`, "DELETE")
+            }
+          >
+            <p>
+              Se retirará esta anotación de todo el intervalo{" "}
+              {fmt(removeNote.starts_at)} — {fmt(removeNote.ends_at)}. El
+              sistema volverá a estimar los tramos que no tengan otras
+              incertidumbres.
+            </p>
+            <p className="preserve">{removeNote.reason}</p>
+            <p className="muted">
+              La anotación y este cambio quedarán en el historial.
+            </p>
+          </Form>
+        </Modal>
+      )}
       {nextState && (
         <Modal title={actionName(nextState)} close={() => setNextState("")}>
           <Form
@@ -1333,7 +1500,9 @@ function CaseDetail({
                 ? "Registrar captura"
                 : modal === "revision"
                   ? "Revisión sin resultado"
-                  : "Aportar información"
+                  : modal === "lugar"
+                    ? "Agregar lugar o cámara particular"
+                    : "Aportar información"
           }
           close={() => setModal("")}
         >
@@ -1366,6 +1535,9 @@ function CaseDetail({
                       }
                     : {
                         text: formValue(f, "text"),
+                        place_kind: formValue(f, "place_kind"),
+                        place_name: formValue(f, "place_name"),
+                        address: formValue(f, "address"),
                         ...(f.get("at") ? { at: iso(f.get("at")) } : {}),
                         ...(f.get("lon") !== "" && f.get("lon") !== null
                           ? {
@@ -1374,7 +1546,11 @@ function CaseDetail({
                             }
                           : {}),
                       };
-              return api(`/cases/${caseId}/entries/${modal}`, "POST", payload);
+              return api(
+                `/cases/${caseId}/entries/${modal === "lugar" ? "aporte" : modal}`,
+                "POST",
+                payload,
+              );
             }}
           >
             {modal === "target" && (
@@ -1414,21 +1590,12 @@ function CaseDetail({
             )}
             {modal === "captura" && (
               <>
-                <Field label="Cámara(s) · Ctrl o ⌘ para seleccionar varias">
-                  <select
-                    name="camera_ids"
-                    multiple
-                    required
-                    defaultValue={cameraId ? [cameraId] : []}
-                    size={6}
-                  >
-                    {cameras.map((cam) => (
-                      <option key={cam.id} value={cam.id}>
-                        {cam.name.replaceAll("_", " ")}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                <CameraPicker
+                  cameras={cameras}
+                  name="camera_ids"
+                  multiple
+                  initial={cameraId}
+                />
                 <fieldset>
                   <legend>Objetivos presentes</legend>
                   {c.targets.map((t: Row) => (
@@ -1445,17 +1612,14 @@ function CaseDetail({
                   ))}
                 </fieldset>
                 <div className="form-grid">
-                  <Field label="Fecha y hora (Argentina)">
-                    <input
-                      type="datetime-local"
-                      name="at"
-                      step="1"
-                      required
-                      defaultValue={localTime(c.starts_at)}
-                      min={localTime(c.starts_at)}
-                      max={localTime(c.ends_at)}
-                    />
-                  </Field>
+                  <DateTimeField
+                    label="Fecha y hora (Argentina)"
+                    name="at"
+                    required
+                    initial={localTime(c.starts_at)}
+                    min={localTime(c.starts_at)}
+                    max={localTime(c.ends_at)}
+                  />
                   <Field label="Certeza">
                     <select name="certainty">
                       <option value="confirmado">Confirmado</option>
@@ -1481,16 +1645,11 @@ function CaseDetail({
             )}
             {modal === "revision" && (
               <>
-                <Field label="Cámara">
-                  <select name="camera_id" required defaultValue={cameraId}>
-                    {!cameraId && <option value="">Seleccionar cámara</option>}
-                    {cameras.map((cam) => (
-                      <option key={cam.id} value={cam.id}>
-                        {cam.name.replaceAll("_", " ")}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                <CameraPicker
+                  cameras={cameras}
+                  name="camera_id"
+                  initial={cameraId}
+                />
                 <Field label="Objetivo">
                   <select name="target_id">
                     <option value="">Todos los objetivos</option>
@@ -1502,66 +1661,29 @@ function CaseDetail({
                   </select>
                 </Field>
                 <div className="form-grid">
-                  <Field label="Revisada desde (Argentina)">
-                    <input
-                      type="datetime-local"
-                      name="from"
-                      step="1"
-                      required
-                      defaultValue={localTime(c.starts_at)}
-                    />
-                  </Field>
-                  <Field label="Hasta (Argentina)">
-                    <input
-                      type="datetime-local"
-                      name="to"
-                      step="1"
-                      required
-                      defaultValue={localTime(c.ends_at)}
-                    />
-                  </Field>
+                  <DateTimeField
+                    name="from"
+                    label="Revisada desde (Argentina)"
+                    required
+                    initial={localTime(c.starts_at)}
+                    min={localTime(c.starts_at)}
+                    max={localTime(c.ends_at)}
+                  />
+                  <DateTimeField
+                    name="to"
+                    label="Hasta (Argentina)"
+                    required
+                    initial={localTime(c.ends_at)}
+                    min={localTime(c.starts_at)}
+                    max={localTime(c.ends_at)}
+                  />
                 </div>
               </>
             )}
-            {modal === "aporte" && (
-              <>
-                <Field label="Información para la búsqueda">
-                  <textarea
-                    name="text"
-                    required
-                    maxLength={4000}
-                    placeholder="Describí el dato y su procedencia…"
-                  />
-                </Field>
-                <Field label="Fecha y hora de referencia (opcional, Argentina)">
-                  <input type="datetime-local" step="1" name="at" />
-                </Field>
-                <div className="form-grid">
-                  <Field label="Longitud (opcional)">
-                    <input
-                      type="number"
-                      name="lon"
-                      step="any"
-                      min="-180"
-                      max="180"
-                      placeholder="-64.11"
-                    />
-                  </Field>
-                  <Field label="Latitud (opcional)">
-                    <input
-                      type="number"
-                      name="lat"
-                      step="any"
-                      min="-90"
-                      max="90"
-                      placeholder="-32.17"
-                    />
-                  </Field>
-                </div>
-                <p className="muted">
-                  Si indicás una ubicación, completá ambas coordenadas.
-                </p>
-              </>
+            {(modal === "aporte" || modal === "lugar") && (
+              <PlaceFields
+                initialKind={modal === "lugar" ? "hecho" : "general"}
+              />
             )}
           </Form>
         </Modal>

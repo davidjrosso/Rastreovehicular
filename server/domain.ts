@@ -71,10 +71,25 @@ export const entryInputs = {
       at: date.nullable().optional(),
       lon: z.number().min(-180).max(180).optional(),
       lat: z.number().min(-90).max(90).optional(),
+      place_kind: z
+        .enum(["general", "hecho", "camara_particular"])
+        .default("general"),
+      place_name: z.string().trim().max(180).default(""),
+      address: z.string().trim().max(300).default(""),
     })
     .refine(
       (v) => (v.lon === undefined) === (v.lat === undefined),
       "Indicar ambas coordenadas",
+    )
+    .refine(
+      (v) =>
+        v.place_kind === "general" ||
+        (!!v.place_name && v.lon !== undefined && v.lat !== undefined),
+      "El lugar requiere nombre y ubicación",
+    )
+    .refine(
+      (v) => v.place_kind !== "camara_particular" || !!v.at,
+      "Indicá la fecha y hora del avistamiento",
     ),
   mensaje: z.object({ text, mentions: z.array(id).max(15).default([]) }),
 };

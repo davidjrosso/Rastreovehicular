@@ -11,17 +11,29 @@ export function CityMap({
   cameras,
   detail,
   onCamera,
+  onPoint,
 }: {
   cameras: any[];
   detail?: any;
   onCamera?: (camera: any) => void;
+  onPoint?: (point: { lon: number; lat: number }) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const click = useRef(onCamera);
   click.current = onCamera;
+  const pointClick = useRef(onPoint);
+  pointClick.current = onPoint;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const boundsKey = detail?.entries
+    ?.filter(
+      (e: any) =>
+        e.kind === "captura" ||
+        (e.kind === "aporte" && e.payload.lon !== undefined),
+    )
+    .map((e: any) => e.id)
+    .join(",");
   useEffect(() => {
     let alive = true;
     let instance: maplibregl.Map;
@@ -45,6 +57,9 @@ export function CityMap({
         attributionControl: false,
       });
       map.current = instance;
+      instance.on("click", (e) =>
+        pointClick.current?.({ lon: e.lngLat.lng, lat: e.lngLat.lat }),
+      );
       instance.addControl(
         new maplibregl.NavigationControl({ showCompass: false }),
         "top-right",
@@ -310,22 +325,45 @@ export function CityMap({
     ) || []) {
       const el = document.createElement("div");
       el.className = "contribution-pin";
-      el.textContent = "+";
+      el.className += ` ${e.payload.place_kind || "general"}`;
+      el.textContent =
+        e.payload.place_kind === "hecho"
+          ? "H"
+          : e.payload.place_kind === "camara_particular"
+            ? "P"
+            : "+";
+      const kind =
+        e.payload.place_kind === "hecho"
+          ? "Lugar del hecho"
+          : e.payload.place_kind === "camara_particular"
+            ? "Cámara particular"
+            : "Aporte";
+      el.title = `${kind}: ${e.payload.place_name || e.payload.text}`;
       markers.push(
         new maplibregl.Marker({ element: el })
           .setLngLat([e.payload.lon, e.payload.lat])
-          .setPopup(new maplibregl.Popup().setText(e.payload.text))
+          .setPopup(
+            new maplibregl.Popup().setText(
+              `${kind} · ${e.payload.place_name || ""}\n${e.payload.address || ""}\n${e.payload.at ? time(e.payload.at) : ""}\n${e.payload.text}`,
+            ),
+          )
           .addTo(instance),
       );
     }
     return () => markers.forEach((m) => m.remove());
   }, [ready, cameras, detail]);
   useEffect(() => {
-    if (!ready || !map.current || !detail) return;
+    if (!ready || !map.current || !detail?.id) return;
     const captures = detail.entries.filter((e: any) => e.kind === "captura");
-    const coordinates = captures.flatMap((e: any) =>
-      e.payload.cameras.map((c: any) => [c.lon, c.lat]),
-    );
+    const coordinates = captures
+      .flatMap((e: any) => e.payload.cameras.map((c: any) => [c.lon, c.lat]))
+      .concat(
+        detail.entries
+          .filter(
+            (e: any) => e.kind === "aporte" && e.payload.lon !== undefined,
+          )
+          .map((e: any) => [e.payload.lon, e.payload.lat]),
+      );
     if (coordinates.length) {
       const bounds = new maplibregl.LngLatBounds();
       coordinates.forEach((p: [number, number]) => bounds.extend(p));
@@ -335,7 +373,7 @@ export function CityMap({
         duration: 400,
       });
     }
-  }, [ready, detail?.id]);
+  }, [ready, detail?.id, boundsKey]);
   return (
     <div className="city-map">
       <div ref={container} className="map-canvas" />
@@ -349,15 +387,23 @@ export function CityMap({
         <span>Mapa local · calles y cámaras</span>
       </div>
       <div className="map-legend">
-        <span>
-          <i style={{ background: "#217875" }} /> Sin revisar
-        </span>
-        <span>
-          <i style={{ background: "#a0aaa5" }} /> Con revisión
-        </span>
-        <span>
-          <i style={{ background: "#e79244" }} /> Con captura
-        </span>
+        {onPoint ? (
+          <span>Clic para elegir la ubicación</span>
+        ) : (
+          <>
+            <span>
+              <i style={{ background: "#217875" }} /> Sin revisar
+            </span>
+            <span>
+              <i style={{ background: "#a0aaa5" }} /> Con revisión
+            </span>
+            <span>
+              <i style={{ background: "#e79244" }} /> Con captura
+            </span>
+            <span>H · Hecho</span>
+            <span>P · Cámara particular</span>
+          </>
+        )}
       </div>
     </div>
   );

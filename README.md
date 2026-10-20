@@ -8,12 +8,16 @@ Primera implementación del sistema de trabajo colaborativo para la sala de moni
 - Administrador, supervisor, operador y externo. Los externos sólo consultan los pedidos de su dependencia y aportan información; las capturas y revisiones pertenecen a la sala.
 - Pedidos correlativos, expediente, franja horaria y estados: pedida, en curso, en revisión, entregada, archivada y rechazada. Devolución y reapertura con observaciones.
 - Varios objetivos, capturas con varias cámaras y objetivos, certeza, sentido observado y fecha con segundos.
+- Selector de cámaras con búsqueda por número o nombre, sin distinguir acentos. Mantiene las cámaras seleccionadas al cambiar el filtro.
+- Horarios con escritura manual `HH:MM` o `HH:MM:SS` y selector de hora sincronizado; fecha seleccionable y validación de la franja del pedido.
 - Fotos y clips de hasta 50 MB por archivo, descargables con autorización de la búsqueda. SHA-256 registrado y archivos fuera de la carpeta pública.
 - Revisiones sin resultado por cámara, horario y objetivo; aportes con coordenadas opcionales.
+- Lugares del hecho y avistamientos en cámaras particulares: nombre, dirección, descripción, fecha y ubicación elegida en el mapa o por coordenadas. Los avistamientos particulares requieren horario y permanecen identificados como aportes de su fuente.
+- Incertidumbre por tramo y objetivo, con tiempo transcurrido y motivo. Conserva la certeza de las capturas y omite la línea, distancia y velocidad del tramo incierto. La anotación abarca su intervalo original, incluidas capturas agregadas después, hasta que la sala la retire; ambos cambios quedan auditados.
 - Mapa MapLibre con calles locales del prototipo, 7.895 nodos de OpenStreetMap, ruteo Dijkstra en el servidor, manos de circulación, avisos de contramano y velocidad inusual. Los puntos dudosos no forman el recorrido.
 - Chat, menciones a usuarios conectados, presencia, actualizaciones Socket.IO y avisos internos.
 - Historial de estados, registros y adjuntos; eliminación lógica de registros.
-- CSV con separador `;`, hora argentina y protección contra fórmulas; KML con capturas y recorridos.
+- CSV con separador `;`, hora argentina y protección contra fórmulas; KML con capturas, lugares y recorridos. Ambos exportes incluyen los motivos de incertidumbre; KML no dibuja los tramos inciertos.
 - Administración de usuarios, desactivación y restablecimiento de contraseñas, dependencias e importación de KML.
 
 Es una versión inicial para probar el flujo de trabajo. No es un sistema de evidencia judicial.
