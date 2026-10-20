@@ -72,6 +72,9 @@ export async function createApp(
         workerSrc: ["'self'", "blob:"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
+        // LAN development runs over HTTP; upgrading its assets to HTTPS
+        // would leave non-localhost clients with a blank page.
+        upgradeInsecureRequests: production ? [] : null,
       },
     },
   });
