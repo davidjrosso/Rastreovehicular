@@ -977,6 +977,7 @@ main {
 }
 .activity-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 15px;
@@ -985,6 +986,10 @@ main {
 }
 .activity-header .tabs {
   gap: 22px;
+  flex: 1 0 100%;
+}
+.activity-header .action-row {
+  padding-bottom: 12px;
 }
 .activity-header .secondary {
   font-size: 10px;
@@ -1985,6 +1990,9 @@ input[type="color"] {
   overflow-y: auto;
   border: 1px solid #d9e2dd;
   border-radius: 7px;
+}
+.camera-picker > input[type="search"] {
+  width: 100%;
 }
 .camera-options label {
   display: flex;
