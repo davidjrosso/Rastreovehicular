@@ -1,0 +1,14 @@
+Rastreo · Río Tercero
+
+La geometría de server/assets/streets.json proviene del prototipo
+recorrido_camaras_servidor.zip aportado por el usuario.
+El prototipo identifica estos datos como:
+© colaboradores de OpenStreetMap, copia de octubre de 2026.
+
+Base de datos geográfica: Open Database License (ODbL) 1.0.
+https://www.openstreetmap.org/copyright
+https://opendatacommons.org/licenses/odbl/1-0/
+
+La publicación de esta geometría no implica publicar las cámaras:
+las ubicaciones de cámaras no se incluyen en este repositorio.
+Las bibliotecas utilizadas conservan sus propias licencias.

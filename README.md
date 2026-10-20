@@ -130,4 +130,3 @@ El ruteo es una estimación, no una observación del trayecto: conecta el punto 
 Antes de un uso operativo: validar cartografía, permisos y flujos con la sala y verificar el despliegue y la restauración en el datacenter.
 
 El documento fuente completo está conservado en [docs/CONCEPTO.md](docs/CONCEPTO.md). La lista anterior describe el alcance realmente implementado; las etapas del concepto son la hoja de ruta.
-
