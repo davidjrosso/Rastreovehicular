@@ -12,11 +12,15 @@ export function CityMap({
   detail,
   onCamera,
   onPoint,
+  suggestions,
+  onSuggestion,
 }: {
   cameras: any[];
   detail?: any;
   onCamera?: (camera: any) => void;
   onPoint?: (point: { lon: number; lat: number }) => void;
+  suggestions?: any[];
+  onSuggestion?: (suggestion: any) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -24,6 +28,8 @@ export function CityMap({
   click.current = onCamera;
   const pointClick = useRef(onPoint);
   pointClick.current = onPoint;
+  const suggestionClick = useRef(onSuggestion);
+  suggestionClick.current = onSuggestion;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const boundsKey = detail?.entries
@@ -281,6 +287,22 @@ export function CityMap({
       ),
     });
     const markers: maplibregl.Marker[] = [];
+    for (const s of suggestions || []) {
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "suggestion-pin";
+      el.textContent = `${s.rank} · CAM-${s.camera.number}`;
+      el.title = `Sugerencia ${s.rank}: ${s.camera.name} · prioridad ${s.priority}`;
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        suggestionClick.current?.(s);
+      });
+      markers.push(
+        new maplibregl.Marker({ element: el, anchor: "top", offset: [0, 10] })
+          .setLngLat([s.camera.lon, s.camera.lat])
+          .addTo(instance),
+      );
+    }
     for (const e of captures) {
       for (const c of e.payload.cameras) {
         const el = document.createElement("div");
@@ -351,7 +373,7 @@ export function CityMap({
       );
     }
     return () => markers.forEach((m) => m.remove());
-  }, [ready, cameras, detail]);
+  }, [ready, cameras, detail, suggestions]);
   useEffect(() => {
     if (!ready || !map.current || !detail?.id) return;
     const captures = detail.entries.filter((e: any) => e.kind === "captura");
@@ -363,7 +385,8 @@ export function CityMap({
             (e: any) => e.kind === "aporte" && e.payload.lon !== undefined,
           )
           .map((e: any) => [e.payload.lon, e.payload.lat]),
-      );
+      )
+      .concat((suggestions || []).map((s) => [s.camera.lon, s.camera.lat]));
     if (coordinates.length) {
       const bounds = new maplibregl.LngLatBounds();
       coordinates.forEach((p: [number, number]) => bounds.extend(p));
@@ -373,7 +396,7 @@ export function CityMap({
         duration: 400,
       });
     }
-  }, [ready, detail?.id, boundsKey]);
+  }, [ready, detail?.id, boundsKey, suggestions]);
   return (
     <div className="city-map">
       <div ref={container} className="map-canvas" />
@@ -402,6 +425,7 @@ export function CityMap({
             </span>
             <span>H · Hecho</span>
             <span>P · Cámara particular</span>
+            {!!suggestions?.length && <span>Violeta · Sugerencia</span>}
           </>
         )}
       </div>

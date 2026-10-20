@@ -29,6 +29,7 @@ import {
 import { api, fmt, iso, localTime, roles, states } from "./api";
 import { CityMap } from "./Map";
 import { CameraPicker, DateTimeField, PlaceFields } from "./inputs";
+import { Suggestions } from "./Suggestions";
 import "./style.css";
 
 type Row = Record<string, any>;
@@ -804,6 +805,8 @@ function CaseDetail({
   const [attachmentEntry, setAttachmentEntry] = useState<string | null>(null);
   const [routeEdit, setRouteEdit] = useState<Row | null>(null);
   const [removeNote, setRemoveNote] = useState<Row | null>(null);
+  const [suggestions, setSuggestions] = useState<Row[]>([]);
+  const [suggestionPrefill, setSuggestionPrefill] = useState<Row | null>(null);
   const refresh = useCallback(async () => {
     try {
       setDetail(await api(`/cases/${caseId}`));
@@ -887,6 +890,7 @@ function CaseDetail({
     setAttachmentEntry(null);
     setRouteEdit(null);
     setRemoveNote(null);
+    setSuggestionPrefill(null);
     void refresh();
   };
   const loadAttachment = async (f: FormData) => {
@@ -897,6 +901,11 @@ function CaseDetail({
       "POST",
       data,
     );
+  };
+  const chooseSuggestion = (suggestion: Row, kind: "captura" | "revision") => {
+    setSuggestionPrefill(suggestion);
+    setCameraId(suggestion.camera.id);
+    setModal(kind);
   };
   return (
     <div className="case-detail">
@@ -984,6 +993,7 @@ function CaseDetail({
               <button
                 className="primary"
                 onClick={() => {
+                  setSuggestionPrefill(null);
                   setCameraId("");
                   setModal("captura");
                 }}
@@ -995,6 +1005,7 @@ function CaseDetail({
               <button
                 className="secondary"
                 onClick={() => {
+                  setSuggestionPrefill(null);
                   setCameraId("");
                   setModal("revision");
                 }}
@@ -1030,8 +1041,15 @@ function CaseDetail({
           <CityMap
             cameras={cameras}
             detail={c}
+            suggestions={suggestions}
+            onSuggestion={
+              staff(user) && working
+                ? (s) => chooseSuggestion(s, "captura")
+                : undefined
+            }
             onCamera={(camera) => {
               if (staff(user) && working) {
+                setSuggestionPrefill(null);
                 setCameraId(camera.id);
                 setModal("captura");
               }
@@ -1133,6 +1151,16 @@ function CaseDetail({
           </div>
         </div>
       </div>
+      {staff(user) && (
+        <Suggestions
+          key={caseId}
+          detail={c}
+          cameras={cameras}
+          onResult={setSuggestions}
+          onChoose={chooseSuggestion}
+          working={working}
+        />
+      )}
       <section className="activity-panel">
         <div className="activity-header">
           <div className="tabs">
@@ -1590,6 +1618,13 @@ function CaseDetail({
             )}
             {modal === "captura" && (
               <>
+                {suggestionPrefill && (
+                  <p className="suggestion-warning">
+                    Cargada desde una sugerencia. La hora propuesta es estimada:
+                    ajustala al horario real del video antes de guardar una
+                    captura.
+                  </p>
+                )}
                 <CameraPicker
                   cameras={cameras}
                   name="camera_ids"
@@ -1604,7 +1639,11 @@ function CaseDetail({
                         type="checkbox"
                         name="target_ids"
                         value={t.id}
-                        defaultChecked={c.targets.length === 1}
+                        defaultChecked={
+                          suggestionPrefill
+                            ? suggestionPrefill.target_id === t.id
+                            : c.targets.length === 1
+                        }
                       />
                       <i style={{ background: t.color }} />
                       {t.description}
@@ -1616,7 +1655,7 @@ function CaseDetail({
                     label="Fecha y hora (Argentina)"
                     name="at"
                     required
-                    initial={localTime(c.starts_at)}
+                    initial={localTime(suggestionPrefill?.at || c.starts_at)}
                     min={localTime(c.starts_at)}
                     max={localTime(c.ends_at)}
                   />
@@ -1645,13 +1684,22 @@ function CaseDetail({
             )}
             {modal === "revision" && (
               <>
+                {suggestionPrefill && (
+                  <p className="suggestion-warning">
+                    Cámara, objetivo y franja cargados desde la sugerencia.
+                    Guardá sólo el intervalo que efectivamente revisaste.
+                  </p>
+                )}
                 <CameraPicker
                   cameras={cameras}
                   name="camera_id"
                   initial={cameraId}
                 />
                 <Field label="Objetivo">
-                  <select name="target_id">
+                  <select
+                    name="target_id"
+                    defaultValue={suggestionPrefill?.target_id || ""}
+                  >
                     <option value="">Todos los objetivos</option>
                     {c.targets.map((t: Row) => (
                       <option key={t.id} value={t.id}>
@@ -1665,7 +1713,7 @@ function CaseDetail({
                     name="from"
                     label="Revisada desde (Argentina)"
                     required
-                    initial={localTime(c.starts_at)}
+                    initial={localTime(suggestionPrefill?.from || c.starts_at)}
                     min={localTime(c.starts_at)}
                     max={localTime(c.ends_at)}
                   />
@@ -1673,7 +1721,7 @@ function CaseDetail({
                     name="to"
                     label="Hasta (Argentina)"
                     required
-                    initial={localTime(c.ends_at)}
+                    initial={localTime(suggestionPrefill?.to || c.ends_at)}
                     min={localTime(c.starts_at)}
                     max={localTime(c.ends_at)}
                   />

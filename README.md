@@ -14,6 +14,7 @@ Primera implementación del sistema de trabajo colaborativo para la sala de moni
 - Revisiones sin resultado por cámara, horario y objetivo; aportes con coordenadas opcionales.
 - Lugares del hecho y avistamientos en cámaras particulares: nombre, dirección, descripción, fecha y ubicación elegida en el mapa o por coordenadas. Los avistamientos particulares requieren horario y permanecen identificados como aportes de su fuente.
 - Incertidumbre por tramo y objetivo, con tiempo transcurrido y motivo. Conserva la certeza de las capturas y omite la línea, distancia y velocidad del tramo incierto. La anotación abarca su intervalo original, incluidas capturas agregadas después, hasta que la sala la retire; ambos cambios quedan auditados.
+- Sugerencias de próximas cámaras para la sala: hasta cinco candidatos por objetivo desde la última captura confirmada, con distancia por calles, prioridad explicada, franja para revisar y marcadores violetas. Acciones para abrir una captura o revisión con cámara, objetivo y horario precargados, sujetos a confirmación del operador.
 - Mapa MapLibre con calles locales del prototipo, 7.895 nodos de OpenStreetMap, ruteo Dijkstra en el servidor, manos de circulación, avisos de contramano y velocidad inusual. Los puntos dudosos no forman el recorrido.
 - Chat, menciones a usuarios conectados, presencia, actualizaciones Socket.IO y avisos internos.
 - Historial de estados, registros y adjuntos; eliminación lógica de registros.
@@ -51,6 +52,18 @@ Abrir http://localhost:3001. Para ese modo local, configurar `APP_ORIGIN=http://
 En Windows también se puede ejecutar `.\scripts\start-local.ps1`. Busca una versión compatible de Node y, si la versión global es antigua, puede usar la incluida con Codex. Mantener esa terminal abierta mientras se usa el sistema.
 
 Las fechas ingresadas se interpretan en Argentina (UTC−03:00), independientemente de la zona del dispositivo. La base conserva instantes con zona horaria.
+
+## Sugerencias de próximas cámaras
+
+Dentro de una búsqueda, la sala puede elegir el objetivo y pulsar **Sugerir próximas cámaras**. El cálculo usa sólo cámaras activas conectadas al grafo local, respeta manos para vehículos y permite ambos sentidos para peatones. Las cámaras de la aparición de origen se excluyen. Los aportes particulares y las apariciones probables o dudosas no se convierten automáticamente en origen confirmado.
+
+El modo **Cercanía por calles** ordena por distancia, después de reducir prioridad a franjas revisadas. **Dirección y alternativas** pondera la continuidad del último tramo y diversifica salidas cercanas. Se puede indicar un sentido cardinal o dejarlo automático. No interpreta texto libre del campo “sentido observado”.
+
+La velocidad automática se estima con el último tramo confirmado cuando es utilizable: entre 5 y 70 km/h para vehículos, o 2 y 8 km/h para peatones. Si no hay datos suficientes, se utiliza un **supuesto ajustable de 30 o 4,5 km/h**, respectivamente. Son parámetros heurísticos, no velocidades observadas. La ventana usa entre 0,5 y 1,5 veces la velocidad de referencia, con 30 segundos de tolerancia y un margen por demoras configurable; se limita al horizonte elegido y al fin del pedido. El horizonte se cuenta desde la captura y funciona también para fechas históricas.
+
+La incertidumbre previa, una demora entre capturas mayor a 10 minutos (20 a pie) o apariciones posteriores sin confirmar deshabilitan la inferencia automática de sentido y velocidad, y añaden al menos 5 minutos de margen. Un origen simultáneo con cámaras a más de 150 m del centro requiere aclarar la ubicación. Las revisiones sin resultado se comparan por cámara, objetivo y unión de intervalos: revisar parcialmente no descarta toda la franja.
+
+Los resultados expresan prioridad, no probabilidades calibradas ni recorridos acreditados. El catálogo tiene ubicaciones, pero no orientación ni campo visual: la sala debe verificar que la cámara cubra el paso de interés. No crean capturas ni modifican registros; los horarios precargados deben ajustarse al video revisado. Se recalculan ante cambios relevantes mientras el panel está activo. Los usuarios externos no reciben sugerencias ni el catálogo de cámaras.
 
 ## Cámaras y datos privados
 

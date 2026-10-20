@@ -33,6 +33,7 @@ import {
 } from "./domain.ts";
 import { importCameras } from "./cameras.ts";
 import { buildRoutes, streets } from "./routing.ts";
+import { suggestCameras, suggestionInput } from "./suggestions.ts";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -562,6 +563,18 @@ export async function createApp(
   app.get("/api/cases/:id", async (req) =>
     detail((req.params as any).id, req.user),
   );
+  app.post("/api/cases/:id/suggestions", async (req) => {
+    const c = await detail((req.params as any).id, req.user);
+    if (!isStaff(req.user))
+      fail(403, "Las sugerencias de cámaras son para la sala.");
+    const input = suggestionInput.parse(req.body);
+    const target = c.targets.find((t) => t.id === input.target_id);
+    if (!target) fail(400, "Objetivo ajeno a la búsqueda");
+    const cameras = (
+      await db.query("SELECT * FROM cameras WHERE active=true ORDER BY number")
+    ).rows;
+    return suggestCameras(c, target, cameras, input);
+  });
   app.post("/api/cases/:id/route-notes", async (req) => {
     const caseId = (req.params as any).id;
     const input = z

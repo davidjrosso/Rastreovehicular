@@ -225,6 +225,54 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
     at: "2026-10-20T12:35:10-03:00",
   });
   assert.equal(second.statusCode, 200, second.body);
+  const suggestionOptions = { target_id: targetId, horizon_minutes: 15 };
+  assert.equal(
+    (await req("externoa", "POST", `${base}/suggestions`, suggestionOptions))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await req("externob", "POST", `${base}/suggestions`, suggestionOptions))
+      .statusCode,
+    404,
+  );
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/suggestions`, {
+        ...suggestionOptions,
+        target_id: randomUUID(),
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/suggestions`, {
+        ...suggestionOptions,
+        speed: 0,
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/suggestions`, {
+        ...suggestionOptions,
+        horizon_minutes: 999,
+      })
+    ).statusCode,
+    400,
+  );
+  const suggested = await req(
+    "operador",
+    "POST",
+    `${base}/suggestions`,
+    suggestionOptions,
+  );
+  assert.equal(suggested.statusCode, 200, suggested.body);
+  assert.equal(suggested.json().origin.entry_id, second.json().id);
+  assert.ok(suggested.json().suggestions.length <= 5);
+  assert.equal((await req("operador", "GET", base)).json().entries.length, 2);
   const routeInput = {
     target_id: targetId,
     from_entry_id: captureId,
@@ -276,6 +324,12 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
   assert.equal(uncertainDetail.routes[0].legs[0].uncertain, true);
   assert.equal(uncertainDetail.routes[0].legs[0].elapsed, 1200);
   assert.deepEqual(uncertainDetail.routes[0].legs[0].coordinates, []);
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/suggestions`, suggestionOptions)
+    ).json().assumptions.cautious,
+    true,
+  );
   const place = {
     place_kind: "camara_particular",
     place_name: "Comercio de prueba",

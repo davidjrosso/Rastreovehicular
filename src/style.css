@@ -2117,3 +2117,143 @@ input[type="color"] {
     flex-wrap: wrap;
   }
 }
+.suggestions-panel {
+  margin: 24px 0;
+  border: 1px solid #dcd8e9;
+  border-radius: 10px;
+  background: #fff;
+  padding: 24px;
+}
+.suggestions-panel .section-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+}
+.suggestions-panel .section-heading {
+  margin-bottom: 12px;
+}
+.suggestion-tag {
+  color: #706185;
+  font-size: 11px;
+}
+.suggestion-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 16px;
+}
+.suggestion-controls .field {
+  min-width: 0;
+}
+.suggestion-help {
+  display: block;
+  margin: 12px 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.suggestion-origin {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+.suggestion-warning {
+  background: #fff6e8;
+  border-left: 3px solid #d8a24e;
+  padding: 10px 13px;
+  font-size: 12px;
+}
+.suggestion-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.suggestion-card {
+  border: 1px solid #e1dce9;
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 12px;
+}
+.suggestion-card header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.suggestion-card header strong {
+  flex: 1;
+}
+.suggestion-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #69558b;
+  color: white;
+  font-weight: 700;
+}
+.suggestion-priority {
+  font-size: 10px;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: #f0edf5;
+  white-space: nowrap;
+}
+.suggestion-priority.alta {
+  color: #246956;
+  background: #e7f2ec;
+}
+.suggestion-priority.baja {
+  color: #777;
+  background: #eee;
+}
+.suggestion-card ul {
+  padding-left: 17px;
+  line-height: 1.65;
+  color: #63736d;
+}
+.suggestion-card .secondary {
+  font-size: 11px;
+  padding: 8px;
+}
+.suggestion-pin {
+  background: #69558b;
+  color: white;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px #0003;
+  border-radius: 5px;
+  padding: 5px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  z-index: 2;
+}
+.spinning {
+  animation: suggestion-spin 1s linear infinite;
+}
+@keyframes suggestion-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 800px) {
+  .suggestion-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .suggestion-list {
+    grid-template-columns: 1fr;
+  }
+  .suggestions-panel {
+    padding: 16px;
+  }
+}
+@media (max-width: 520px) {
+  .suggestion-controls {
+    grid-template-columns: 1fr;
+  }
+  .suggestion-tag {
+    display: none;
+  }
+}
