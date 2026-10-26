@@ -1,0 +1,134 @@
+.hik-dialog {
+  border: 1px solid #cbdad5;
+  border-radius: 16px;
+  padding: 24px;
+  width: min(940px, calc(100vw - 32px));
+  max-height: 90vh;
+  color: #193b37;
+  background: #fff;
+  box-shadow: 0 20px 70px #102d3340;
+  overflow: auto;
+}
+.hik-dialog::backdrop {
+  background: #102c3acc;
+}
+.hik-dialog > header {
+  position: sticky;
+  top: -24px;
+  z-index: 2;
+  background: white;
+  padding-top: 12px;
+  border-bottom: 1px solid #d8e3df;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.hik-dialog h2 {
+  margin: 8px 0 20px;
+}
+.hik-dialog p {
+  line-height: 1.6;
+}
+.hik-fields {
+  border: 0;
+  padding: 0;
+  margin: 14px 0;
+  display: grid;
+  gap: 14px;
+}
+.hik-fields > label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+.hik-fields > button {
+  justify-self: start;
+}
+.hik-fields .hik-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hik-checkbox input {
+  width: auto;
+}
+.hik-notice {
+  background: #edf4ef;
+  padding: 12px;
+  border-radius: 8px;
+}
+.hik-preview img,
+.hik-photo {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  margin: 18px auto;
+  object-fit: contain;
+}
+.hik-result-list {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.hik-result-list > button {
+  display: grid;
+  grid-template-columns: 100px 180px 1fr;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid #d8e3df;
+  padding: 12px;
+  background: #fafcfb;
+  border-radius: 8px;
+}
+.hik-result-list > button small {
+  grid-column: 1/-1;
+}
+.hik-result-list > .selected {
+  border-color: #247b68;
+  background: #eaf5f0;
+}
+.hik-selected {
+  border-top: 1px solid #d8e3df;
+  padding-top: 18px;
+}
+.evidence-source {
+  display: block;
+  line-height: 1.5;
+  margin: 8px 0;
+  color: #536b64;
+  overflow-wrap: anywhere;
+}
+.entry-evidence {
+  max-width: 260px;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.entry-evidence-link {
+  display: block !important;
+}
+.hik-entry-action {
+  font-size: 12px;
+  max-width: 105px;
+  white-space: normal;
+}
+.hik-fields .camera-picker {
+  max-height: 350px;
+  overflow: auto;
+}
+@media (max-width: 600px) {
+  .hik-dialog {
+    padding: 15px;
+  }
+  .hik-result-list > button {
+    grid-template-columns: 1fr;
+  }
+  .hik-dialog > header {
+    align-items: flex-start;
+    top: -15px;
+  }
+  .hik-dialog h2 {
+    font-size: 22px;
+  }
+}

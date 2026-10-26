@@ -34,6 +34,9 @@ import {
 import { importCameras } from "./cameras.ts";
 import { cameraIntegrations, integrationConfig } from "./integrations.ts";
 import { recordingInput, recordingService } from "./recordings.ts";
+import { registerEvidenceRoutes } from "./evidence-routes.ts";
+import { evidenceService } from "./evidence.ts";
+import type { IntegrationConfig } from "./integrations.ts";
 import { buildRoutes, streets } from "./routing.ts";
 import { suggestCameras, suggestionInput } from "./suggestions.ts";
 
@@ -48,7 +51,12 @@ const SID = "rastreo_session";
 
 export async function createApp(
   db: DB,
-  options: { test?: boolean; uploadDir?: string } = {},
+  options: {
+    test?: boolean;
+    uploadDir?: string;
+    evidence?: ReturnType<typeof evidenceService>;
+    evidenceConfig?: IntegrationConfig;
+  } = {},
 ) {
   const production = process.env.NODE_ENV === "production";
   const origin = process.env.APP_ORIGIN || "http://localhost:5173";
@@ -295,6 +303,17 @@ export async function createApp(
     io.to(`case:${caseId}`).emit("changed");
     io.emit("refresh");
   };
+  registerEvidenceRoutes(app, {
+    db,
+    uploads,
+    access,
+    audit,
+    changed,
+    config:
+      options.evidenceConfig ||
+      integrationConfig(options.test ? {} : process.env),
+    service: options.evidence,
+  });
   app.addHook("preClose", async () => {
     await new Promise<void>((done) => io.close(() => done()));
   });

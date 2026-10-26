@@ -175,7 +175,7 @@ export async function hikRequest(
   }
   if (result?.code !== "0" && result?.code !== 0)
     return problem(
-      "OpenAPI no pudo verificar las grabaciones. Revisá permisos de reproducción, almacenamiento y conectividad.",
+      "OpenAPI no pudo completar la consulta. Revisá los permisos del recurso, almacenamiento y conectividad.",
     );
   return result.data;
 }

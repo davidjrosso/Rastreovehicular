@@ -10,6 +10,7 @@ import {
 import { api, fmt, states } from "./api";
 import { reportModel, certaintyLabels } from "./report-model";
 import { ReportMap } from "./ReportMap";
+import { EvidenceSource } from "./evidence-source";
 import "./reports.css";
 type Row = Record<string, any>;
 const cameraNames = (entry: Row) =>
@@ -171,7 +172,10 @@ function ReportImage({ attachment }: { attachment: Row }) {
           onError={() => setFailed(true)}
         />
       )}
-      <figcaption>{attachment.name}</figcaption>
+      <figcaption>
+        {attachment.name}
+        <EvidenceSource source={attachment.source} />
+      </figcaption>
     </figure>
   );
 }

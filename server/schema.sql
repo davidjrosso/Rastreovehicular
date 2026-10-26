@@ -41,12 +41,17 @@ CREATE TABLE IF NOT EXISTS entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS entries_case ON entries(case_id, created_at);
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS source_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS entries_source ON entries(case_id,source_key) WHERE source_key IS NOT NULL AND deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS attachments (
   id UUID PRIMARY KEY, case_id UUID NOT NULL REFERENCES cases(id),
   entry_id UUID NOT NULL REFERENCES entries(id), user_id UUID NOT NULL REFERENCES users(id),
   name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE attachments ADD COLUMN IF NOT EXISTS source JSONB;
+ALTER TABLE attachments ADD COLUMN IF NOT EXISTS source_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS attachments_source ON attachments(entry_id,source_key) WHERE source_key IS NOT NULL;
 CREATE TABLE IF NOT EXISTS audit (
   id UUID PRIMARY KEY, case_id UUID REFERENCES cases(id), user_id UUID NOT NULL REFERENCES users(id),
   action TEXT NOT NULL, detail JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()

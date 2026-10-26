@@ -34,6 +34,8 @@ import { CameraIntegrations } from "./CameraIntegrations";
 import { CameraHealth } from "./CameraHealth";
 import { RecordingPanel } from "./Recordings";
 import { Reports } from "./Reports";
+import { HikEvidence } from "./HikEvidence";
+import { EvidenceSource } from "./evidence-source";
 import "./style.css";
 
 type Row = Record<string, any>;
@@ -843,6 +845,7 @@ function CaseDetail({
   const [nextState, setNextState] = useState(""),
     [deleting, setDeleting] = useState<Row | null>(null);
   const [attachmentEntry, setAttachmentEntry] = useState<string | null>(null);
+  const [hikEvidence, setHikEvidence] = useState<Row | null>(null);
   const [routeEdit, setRouteEdit] = useState<Row | null>(null);
   const [removeNote, setRemoveNote] = useState<Row | null>(null);
   const [suggestions, setSuggestions] = useState<Row[]>([]);
@@ -950,6 +953,15 @@ function CaseDetail({
   };
   return (
     <div className="case-detail">
+      {hikEvidence && (
+        <HikEvidence
+          detail={c}
+          entry={hikEvidence.entry}
+          cameras={cameras}
+          close={() => setHikEvidence(null)}
+          refresh={() => void refresh()}
+        />
+      )}
       <button className="back" onClick={back}>
         <ArrowLeft size={16} />
         Todas las búsquedas
@@ -1056,6 +1068,11 @@ function CaseDetail({
                 Revisada sin resultado
               </button>
             </div>
+          )}
+          {staff(user) && (
+            <button className="secondary" onClick={() => setHikEvidence({})}>
+              <Search size={17} /> Buscar patente en HikCentral
+            </button>
           )}
           <div className="collaborators">
             <span>
@@ -1376,14 +1393,36 @@ function CaseDetail({
                         {c.attachments
                           .filter((a: Row) => a.entry_id === e.id)
                           .map((a: Row) => (
-                            <a key={a.id} href={`/api/attachments/${a.id}`}>
+                            <a
+                              key={a.id}
+                              href={`/api/attachments/${a.id}`}
+                              className={a.source ? "entry-evidence-link" : ""}
+                            >
+                              {a.source && (
+                                <img
+                                  className="entry-evidence"
+                                  src={`/api/attachments/${a.id}?inline=1`}
+                                  alt={a.name}
+                                  loading="lazy"
+                                />
+                              )}
                               <FileText size={14} />
                               {a.name} · {(a.size / 1024 / 1024).toFixed(1)} MB
+                              <EvidenceSource source={a.source} />
                             </a>
                           ))}
                       </div>
                     </div>
                     <div className="entry-actions">
+                      {tab === "captura" && staff(user) && (
+                        <button
+                          type="button"
+                          className="secondary hik-entry-action"
+                          onClick={() => setHikEvidence({ entry: e })}
+                        >
+                          Traer foto de grabación
+                        </button>
+                      )}
                       {["captura", "aporte"].includes(tab) &&
                         ((tab === "captura" && working && staff(user)) ||
                           (tab === "aporte" &&
