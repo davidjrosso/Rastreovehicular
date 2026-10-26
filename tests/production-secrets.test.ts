@@ -79,9 +79,21 @@ test(
     });
     assert.equal(result.status, 0, result.stderr);
     const config = JSON.parse(result.stdout);
+    // `config` serializes Compose syntax: $$ represents a literal $.
+    // https://docs.docker.com/reference/compose-file/interpolation/
     assert.equal(
       config.services.app.environment.HIK_APP_SECRET,
-      "fixture-$secret # with spaces",
+      "fixture-$$secret # with spaces",
+    );
+    const interpolation = spawnSync("docker", [...args, "--environment"], {
+      encoding: "utf8",
+      env,
+    });
+    assert.equal(interpolation.status, 0);
+    assert.ok(
+      interpolation.stdout
+        .split(/\r?\n/)
+        .includes("HIK_APP_SECRET=fixture-$secret # with spaces"),
     );
     assert.equal(
       config.services.app.environment.HIK_CAMERA_MAPPING,
