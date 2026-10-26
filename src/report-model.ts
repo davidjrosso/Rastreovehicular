@@ -88,6 +88,11 @@ export function reportModel(data: Row, targetId = "all") {
   );
   const reviewedCameras = new Set(reviews.map((e) => e.payload.camera_id)).size;
   const pending: string[] = [];
+  const routeAlerts = warnings.filter((w) => !w.uncertain).length;
+  if (routeAlerts)
+    pending.push(
+      `${routeAlerts} tramo(s) con advertencias de cálculo requieren revisar horarios y ubicaciones.`,
+    );
   for (const target of targets) {
     const observations = confirmed.filter((e) =>
       e.payload.target_ids.includes(target.id),

@@ -27,10 +27,10 @@ export function ReportMap({
       sy = 111320;
     const xs = coords.map((p) => p[0] * sx),
       ys = coords.map((p) => -p[1] * sy);
-    const minX = Math.min(...xs),
-      maxX = Math.max(...xs),
-      minY = Math.min(...ys),
-      maxY = Math.max(...ys);
+    const minX = xs.reduce((a, b) => Math.min(a, b), Infinity),
+      maxX = xs.reduce((a, b) => Math.max(a, b), -Infinity),
+      minY = ys.reduce((a, b) => Math.min(a, b), Infinity),
+      maxY = ys.reduce((a, b) => Math.max(a, b), -Infinity);
     const scale = Math.min(
       820 / Math.max(500, maxX - minX),
       400 / Math.max(350, maxY - minY),
