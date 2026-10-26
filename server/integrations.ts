@@ -12,6 +12,7 @@ export type IntegrationConfig = {
   mappings?: Record<string, string>;
   mapInterval: number;
   hikInterval: number;
+  recordType?: "0" | "1";
 };
 export function integrationConfig(env = process.env): IntegrationConfig {
   const seconds = (
@@ -58,11 +59,12 @@ export function integrationConfig(env = process.env): IntegrationConfig {
     mappings,
     mapInterval: seconds(env.MY_MAPS_INTERVAL_SECONDS, 300, 60),
     hikInterval: seconds(env.HIK_INTERVAL_SECONDS, 60, 30),
+    recordType: env.HIK_RECORD_TYPE === "1" ? "1" : "0",
   };
 }
 
 // Only these messages are returned to the browser; remote bodies and credentials stay private.
-class IntegrationError extends Error {}
+export class IntegrationError extends Error {}
 const problem = (message: string): never => {
   throw new IntegrationError(message);
 };
@@ -133,6 +135,50 @@ export type HikCamera = {
   cameraName: string;
   status: number;
 };
+export async function hikRequest(
+  config: IntegrationConfig,
+  path: string,
+  payload: unknown,
+  signal: AbortSignal,
+  fetcher = fetch,
+) {
+  let url: URL;
+  try {
+    url = new URL(config.hikUrl || "");
+  } catch {
+    return problem("Configurá la dirección HTTPS de OpenAPI.");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !["/", "/artemis", "/artemis/"].includes(url.pathname)
+  )
+    return problem("La dirección HTTPS de OpenAPI no es válida.");
+  url.pathname = path;
+  const body = JSON.stringify(payload);
+  const response = await fetcher(url, {
+    method: "POST",
+    redirect: "error",
+    signal,
+    body,
+    headers: hikHeaders(path, body, config.key!, config.secret!),
+  });
+  let result: any;
+  try {
+    result = JSON.parse(await boundedText(response));
+  } catch (error) {
+    if (error instanceof IntegrationError) throw error;
+    return problem("OpenAPI no devolvió una respuesta válida.");
+  }
+  if (result?.code !== "0" && result?.code !== 0)
+    return problem(
+      "OpenAPI no pudo verificar las grabaciones. Revisá permisos de reproducción, almacenamiento y conectividad.",
+    );
+  return result.data;
+}
 export async function fetchHikCameras(
   config: IntegrationConfig,
   fetcher = fetch,

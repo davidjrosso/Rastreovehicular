@@ -202,6 +202,47 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
   );
   const cameras = (await req("operador", "GET", "/api/cameras")).json();
   assert.equal(cameras.length, 2);
+  const recordingQuery = {
+    queries: [
+      { camera_id: cameras[0].id, from: input.starts_at, to: input.ends_at },
+    ],
+  };
+  assert.equal(
+    (await req("externoa", "POST", `${base}/recordings`, recordingQuery))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await req("externob", "POST", `${base}/recordings`, recordingQuery))
+      .statusCode,
+    404,
+  );
+  const recordingResponse = await req(
+    "operador",
+    "POST",
+    `${base}/recordings`,
+    recordingQuery,
+  );
+  assert.equal(recordingResponse.statusCode, 200, recordingResponse.body);
+  assert.equal(recordingResponse.json().results[0].status, "unknown");
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/recordings`, {
+        queries: [
+          { ...recordingQuery.queries[0], from: "2026-10-19T00:00:00-03:00" },
+        ],
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await req("operador", "POST", `${base}/recordings`, {
+        queries: [{ ...recordingQuery.queries[0], camera_id: randomUUID() }],
+      })
+    ).statusCode,
+    400,
+  );
   const capture = {
     camera_ids: [cameras[0].id],
     target_ids: [targetId],

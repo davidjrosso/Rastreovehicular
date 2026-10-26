@@ -26,6 +26,7 @@ services:
       HIK_APP_KEY: ${HIK_APP_KEY:-}
       HIK_APP_SECRET: ${HIK_APP_SECRET:-}
       HIK_INTERVAL_SECONDS: ${HIK_INTERVAL_SECONDS:-60}
+      HIK_RECORD_TYPE: ${HIK_RECORD_TYPE:-0}
       HIK_CAMERA_MAPPING: ${HIK_CAMERA_MAPPING:-}
     volumes:
       - uploads:/app/uploads

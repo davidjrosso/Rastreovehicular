@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Compass, RefreshCw } from "lucide-react";
 import { api, fmt } from "./api";
+import { RecordingCheck } from "./Recordings";
 type Row = Record<string, any>;
 
 export function Suggestions({
@@ -28,7 +29,13 @@ export function Suggestions({
       ["captura", "revision"].includes(e.kind),
     ),
     notes: detail.route_notes,
-    cameras,
+    cameras: cameras.map((c) => ({
+      id: c.id,
+      number: c.number,
+      name: c.name,
+      lon: c.lon,
+      lat: c.lat,
+    })),
   });
   useEffect(() => {
     let alive = true;
@@ -236,6 +243,12 @@ export function Suggestions({
                     <li key={r}>{r}</li>
                   ))}
                 </ul>
+                <RecordingCheck
+                  caseId={detail.id}
+                  camera={s.camera}
+                  from={s.from}
+                  to={s.to}
+                />
                 {working && (
                   <div className="action-row">
                     <button

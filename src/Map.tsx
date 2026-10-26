@@ -3,7 +3,12 @@ import * as maplibregl from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import fontUrl from "@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2?url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { api, time } from "./api";
+import { api, fmt, time } from "./api";
+import {
+  recordingColors,
+  recordingLabels,
+  recordingStatus,
+} from "./recording-utils";
 import { healthColors, healthLabels, healthStatus } from "./CameraHealth";
 
 maplibregl.setWorkerUrl(workerUrl);
@@ -15,6 +20,7 @@ export function CityMap({
   onPoint,
   suggestions,
   onSuggestion,
+  recordings,
 }: {
   cameras: any[];
   detail?: any;
@@ -22,6 +28,7 @@ export function CityMap({
   onPoint?: (point: { lon: number; lat: number }) => void;
   suggestions?: any[];
   onSuggestion?: (suggestion: any) => void;
+  recordings?: any[];
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -221,7 +228,7 @@ export function CityMap({
               popup
                 .setLngLat(feature.geometry.coordinates as [number, number])
                 .setText(
-                  `${feature.properties.name} · Estado actual: ${feature.properties.healthLabel}`,
+                  `${feature.properties.name} · ${feature.properties.healthLabel}`,
                 )
                 .addTo(instance);
           });
@@ -271,16 +278,25 @@ export function CityMap({
       : captures.flatMap((e: any) => e.payload.cameras);
     (instance.getSource("cameras") as maplibregl.GeoJSONSource).setData({
       type: "FeatureCollection",
-      features: allCameras.map((c: any) => ({
-        type: "Feature",
-        properties: {
-          ...c,
-          color: color(c.id),
-          healthColor: healthColors[healthStatus(c)],
-          healthLabel: healthLabels[healthStatus(c)],
-        },
-        geometry: { type: "Point", coordinates: [c.lon, c.lat] },
-      })),
+      features: allCameras.map((c: any) => {
+        const recording = recordings?.find((r) => r.camera_id === c.id);
+        return {
+          type: "Feature",
+          properties: {
+            ...c,
+            color: color(c.id),
+            healthColor: detail
+              ? recordingColors[recordingStatus(recording)]
+              : healthColors[healthStatus(c)],
+            healthLabel: detail
+              ? recording
+                ? `Grabación ${fmt(recording.from)} — ${fmt(recording.to)}: ${recordingLabels[recordingStatus(recording)]}`
+                : "Grabación en la fecha del recorrido: sin consultar"
+              : `Estado actual: ${healthLabels[healthStatus(c)]}`,
+          },
+          geometry: { type: "Point", coordinates: [c.lon, c.lat] },
+        };
+      }),
     });
     (instance.getSource("routes") as maplibregl.GeoJSONSource).setData({
       type: "FeatureCollection",
@@ -381,7 +397,7 @@ export function CityMap({
       );
     }
     return () => markers.forEach((m) => m.remove());
-  }, [ready, cameras, detail, suggestions]);
+  }, [ready, cameras, detail, suggestions, recordings]);
   useEffect(() => {
     if (!ready || !map.current || !detail?.id) return;
     const captures = detail.entries.filter((e: any) => e.kind === "captura");
@@ -419,10 +435,28 @@ export function CityMap({
       </div>
       <div className="map-legend">
         <span className="health-legend">
-          Borde:{" "}
-          <b style={{ color: healthColors.offline }}>rojo · fuera de línea</b> /{" "}
-          <b style={{ color: healthColors.online }}>verde · en línea</b> / gris
-          · sin información reciente
+          {detail ? (
+            <>
+              Grabación en la franja consultada:{" "}
+              <b style={{ color: recordingColors.complete }}>
+                verde · completa
+              </b>{" "}
+              /{" "}
+              <b style={{ color: recordingColors.partial }}>ámbar · parcial</b>{" "}
+              /{" "}
+              <b style={{ color: recordingColors.none }}>rojo · sin archivos</b>{" "}
+              / gris · sin verificar
+            </>
+          ) : (
+            <>
+              Borde:{" "}
+              <b style={{ color: healthColors.offline }}>
+                rojo · fuera de línea
+              </b>{" "}
+              / <b style={{ color: healthColors.online }}>verde · en línea</b> /
+              gris · sin información reciente
+            </>
+          )}
         </span>
         {onPoint ? (
           <span>Clic para elegir la ubicación</span>

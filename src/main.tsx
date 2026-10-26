@@ -32,6 +32,7 @@ import { CameraPicker, DateTimeField, PlaceFields } from "./inputs";
 import { Suggestions } from "./Suggestions";
 import { CameraIntegrations } from "./CameraIntegrations";
 import { CameraHealth } from "./CameraHealth";
+import { RecordingPanel } from "./Recordings";
 import "./style.css";
 
 type Row = Record<string, any>;
@@ -820,6 +821,7 @@ function CaseDetail({
   const [routeEdit, setRouteEdit] = useState<Row | null>(null);
   const [removeNote, setRemoveNote] = useState<Row | null>(null);
   const [suggestions, setSuggestions] = useState<Row[]>([]);
+  const [recordings, setRecordings] = useState<Row[]>([]);
   const [suggestionPrefill, setSuggestionPrefill] = useState<Row | null>(null);
   const refresh = useCallback(async () => {
     try {
@@ -1055,6 +1057,7 @@ function CaseDetail({
           <CityMap
             cameras={cameras}
             detail={c}
+            recordings={recordings}
             suggestions={suggestions}
             onSuggestion={
               staff(user) && working
@@ -1165,6 +1168,14 @@ function CaseDetail({
           </div>
         </div>
       </div>
+      {staff(user) && (
+        <RecordingPanel
+          key={`${caseId}-${c.starts_at}-${c.ends_at}`}
+          detail={c}
+          cameras={cameras}
+          onResult={setRecordings}
+        />
+      )}
       {staff(user) && (
         <Suggestions
           key={caseId}

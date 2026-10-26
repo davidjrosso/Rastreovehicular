@@ -30,7 +30,7 @@ export function CameraHealth({ camera }: { camera: any }) {
       title={`Estado actual de conexión${camera.health_checked_at ? ` · Última consulta: ${fmt(camera.health_checked_at)}` : " · Sin consulta a HikCentral"}`}
     >
       <i />
-      {healthLabels[status]}
+      Ahora: {healthLabels[status]}
     </small>
   );
 }

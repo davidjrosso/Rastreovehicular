@@ -2329,3 +2329,48 @@ input[type="color"] {
 .health-legend b {
   font-weight: 600;
 }
+.recording-panel {
+  margin-top: 24px;
+}
+.recording-panel form {
+  display: grid;
+  gap: 16px;
+}
+.recording-panel form > .primary {
+  justify-self: start;
+}
+.recording-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.recording-results article {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.recording-results h4 {
+  margin-top: 0;
+}
+.recording-check {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin: 12px 0;
+}
+.recording-result {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.recording-result small {
+  display: block;
+  color: #697a75;
+  margin: 8px 0;
+}
+.recording-result details {
+  max-height: 220px;
+  overflow: auto;
+}
+.recording-result summary {
+  cursor: pointer;
+}

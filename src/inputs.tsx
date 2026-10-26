@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { CityMap } from "./Map";
 import { matchesCamera, normalizeClock } from "./form-utils";
 import { CameraHealth } from "./CameraHealth";
@@ -8,18 +8,27 @@ export function CameraPicker({
   name,
   multiple = false,
   initial = "",
+  legend,
+  onSelectionChange,
 }: {
   cameras: any[];
   name: string;
   multiple?: boolean;
   initial?: string;
+  legend?: string;
+  onSelectionChange?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>(initial ? [initial] : []);
   const filtered = cameras.filter((c) => matchesCamera(c, query));
+  useEffect(() => {
+    onSelectionChange?.();
+  }, [selected, onSelectionChange]);
   return (
     <fieldset className="camera-picker">
-      <legend>{multiple ? "Cámaras de la captura" : "Cámara revisada"}</legend>
+      <legend>
+        {legend || (multiple ? "Cámaras de la captura" : "Cámara revisada")}
+      </legend>
       <input
         aria-label="Buscar cámara por número o nombre"
         placeholder="Escribí el número o el nombre…"

@@ -33,6 +33,7 @@ import {
 } from "./domain.ts";
 import { importCameras } from "./cameras.ts";
 import { cameraIntegrations, integrationConfig } from "./integrations.ts";
+import { recordingInput, recordingService } from "./recordings.ts";
 import { buildRoutes, streets } from "./routing.ts";
 import { suggestCameras, suggestionInput } from "./suggestions.ts";
 
@@ -210,6 +211,9 @@ export async function createApp(
     db,
     integrationConfig(options.test ? {} : process.env),
     () => io.emit("refresh"),
+  );
+  const recordings = recordingService(
+    integrationConfig(options.test ? {} : process.env),
   );
   app.addHook("onReady", async () => {
     if (!options.test) integrations.start();
@@ -601,6 +605,42 @@ export async function createApp(
     ).rows;
     return suggestCameras(c, target, cameras, input);
   });
+  app.post(
+    "/api/cases/:id/recordings",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req) => {
+      const c = await access(db, (req.params as any).id, req.user);
+      if (!isStaff(req.user))
+        fail(403, "La consulta de grabaciones es para la sala.");
+      const { queries } = recordingInput.parse(req.body);
+      if (
+        queries.some(
+          (q) =>
+            Date.parse(q.from) < new Date(c.starts_at).getTime() ||
+            Date.parse(q.to) > new Date(c.ends_at).getTime(),
+        )
+      )
+        fail(400, "La consulta debe estar dentro de la franja del pedido.");
+      const cameras = (
+        await db.query(
+          "SELECT id,number,hik_index_code FROM cameras WHERE id=ANY($1::uuid[])",
+          [queries.map((q) => q.camera_id)],
+        )
+      ).rows;
+      if (queries.some((q) => !cameras.some((cam) => cam.id === q.camera_id)))
+        fail(400, "Una cámara no existe en el registro.");
+      return {
+        results: await Promise.all(
+          queries.map((q) =>
+            recordings.check(
+              q,
+              cameras.find((cam) => cam.id === q.camera_id)!,
+            ),
+          ),
+        ),
+      };
+    },
+  );
   app.post("/api/cases/:id/route-notes", async (req) => {
     const caseId = (req.params as any).id;
     const input = z
