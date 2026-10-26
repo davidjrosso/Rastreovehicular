@@ -26,5 +26,11 @@ if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'dist\index.html'))) {
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la aplicación.' }
 }
 Write-Host 'Rastreo: http://localhost:3001 - Ctrl+C para detener.'
-& $taskNode --import tsx server/index.ts
+$taskNodeArgs = @('--import', 'tsx', 'server/index.ts')
+# Use the OS trust store when supported, while retaining certificate and hostname validation.
+$taskNodeHelp = & $taskNode --help
+if (($taskNodeHelp -join "`n") -match '--use-system-ca') {
+    $taskNodeArgs = @('--use-system-ca') + $taskNodeArgs
+}
+& $taskNode @taskNodeArgs
 exit $LASTEXITCODE

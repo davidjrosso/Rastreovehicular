@@ -72,8 +72,8 @@ test("busca video del hecho aunque hoy esté desconectada; no filtra por estado 
       "https://hik.example.test/artemis/api/video/v1/cameras/playbackURLs",
     );
     const body = JSON.parse(String(options?.body));
-    assert.equal(body.beginTime, from);
-    assert.equal(body.endTime, to);
+    assert.equal(body.beginTime, "2024-10-20T13:00:00+00:00");
+    assert.equal(body.endTime, "2024-10-20T14:00:00+00:00");
     assert.equal(body.recordType, "0");
     assert.equal(body.mergeSegment, 0);
     assert.equal(body.cameraIndexCode, camera.hik_index_code);
@@ -93,6 +93,26 @@ test("busca video del hecho aunque hoy esté desconectada; no filtra por estado 
     (await empty.check(query, { ...camera, health_status: "online" })).status,
     "none",
   );
+});
+
+test("convierte UTC con milisegundos al formato de HikCentral sin perder el intervalo solicitado", async () => {
+  const from = "2024-10-20T23:59:59.250Z",
+    to = "2024-10-21T00:00:00.750Z";
+  const segments = await fetchRecordingIntervals(
+    config,
+    "camera",
+    from,
+    to,
+    async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      assert.equal(body.beginTime, "2024-10-20T23:59:59+00:00");
+      assert.equal(body.endTime, "2024-10-21T00:00:01+00:00");
+      return response([segment(body.beginTime, body.endTime)]);
+    },
+  );
+  const result = recordingCoverage(from, to, segments);
+  assert.equal(result.status, "complete");
+  assert.deepEqual(result.intervals, [{ from, to }]);
 });
 
 test("fallas, datos ausentes o páginas incompletas son no verificables; jamás ausencia de video", async () => {

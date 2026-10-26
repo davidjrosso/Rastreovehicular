@@ -85,6 +85,12 @@ export async function fetchRecordingIntervals(
   to: string,
   fetcher = fetch,
 ) {
+  // Some HCP installations reject Z and milliseconds despite accepting ISO offsets.
+  // Expand to whole seconds for the request; coverage is clipped to the original interval.
+  const hikTime = (value: string, end = false) =>
+    new Date((end ? Math.ceil : Math.floor)(Date.parse(value) / 1000) * 1000)
+      .toISOString()
+      .replace(/\.\d{3}Z$/, "+00:00");
   const segments: RecordingInterval[] = [];
   const pages = new Set<string>();
   let uuid: string | undefined;
@@ -98,8 +104,8 @@ export async function fetchRecordingIntervals(
         recordType: config.recordType || "0",
         protocol: "rtsp",
         transmode: 1,
-        beginTime: from,
-        endTime: to,
+        beginTime: hikTime(from),
+        endTime: hikTime(to, true),
         mergeSegment: 0,
         ...(uuid ? { uuid } : {}),
       },
