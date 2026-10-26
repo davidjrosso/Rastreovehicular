@@ -4,6 +4,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import fontUrl from "@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2?url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { api, time } from "./api";
+import { healthColors, healthLabels, healthStatus } from "./CameraHealth";
 
 maplibregl.setWorkerUrl(workerUrl);
 
@@ -201,8 +202,8 @@ export function CityMap({
                 7,
               ],
               "circle-color": ["get", "color"],
-              "circle-stroke-width": 1.5,
-              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2.5,
+              "circle-stroke-color": ["get", "healthColor"],
             },
           });
           instance.on("click", "camera-points", (e) => {
@@ -219,7 +220,9 @@ export function CityMap({
             if (feature?.geometry.type === "Point")
               popup
                 .setLngLat(feature.geometry.coordinates as [number, number])
-                .setText(feature.properties.name)
+                .setText(
+                  `${feature.properties.name} · Estado actual: ${feature.properties.healthLabel}`,
+                )
                 .addTo(instance);
           });
           instance.on("mouseleave", "camera-points", () => {
@@ -270,7 +273,12 @@ export function CityMap({
       type: "FeatureCollection",
       features: allCameras.map((c: any) => ({
         type: "Feature",
-        properties: { ...c, color: color(c.id) },
+        properties: {
+          ...c,
+          color: color(c.id),
+          healthColor: healthColors[healthStatus(c)],
+          healthLabel: healthLabels[healthStatus(c)],
+        },
         geometry: { type: "Point", coordinates: [c.lon, c.lat] },
       })),
     });
@@ -410,6 +418,12 @@ export function CityMap({
         <span>Mapa local · calles y cámaras</span>
       </div>
       <div className="map-legend">
+        <span className="health-legend">
+          Borde:{" "}
+          <b style={{ color: healthColors.offline }}>rojo · fuera de línea</b> /{" "}
+          <b style={{ color: healthColors.online }}>verde · en línea</b> / gris
+          · sin información reciente
+        </span>
         {onPoint ? (
           <span>Clic para elegir la ubicación</span>
         ) : (

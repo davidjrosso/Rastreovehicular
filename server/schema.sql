@@ -68,3 +68,15 @@ CREATE TABLE IF NOT EXISTS route_notes (
   CHECK (ends_at >= starts_at)
 );
 CREATE INDEX IF NOT EXISTS route_notes_case ON route_notes(case_id);
+
+ALTER TABLE audit ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE cameras ADD COLUMN IF NOT EXISTS health_status TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE cameras ADD COLUMN IF NOT EXISTS health_checked_at TIMESTAMPTZ;
+ALTER TABLE cameras ADD COLUMN IF NOT EXISTS hik_index_code TEXT;
+CREATE TABLE IF NOT EXISTS camera_integrations (
+  source TEXT PRIMARY KEY,
+  last_attempt TIMESTAMPTZ,
+  last_success TIMESTAMPTZ,
+  last_error TEXT,
+  summary JSONB NOT NULL DEFAULT '{}'
+);

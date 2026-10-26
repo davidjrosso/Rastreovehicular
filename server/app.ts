@@ -32,6 +32,7 @@ import {
   type User,
 } from "./domain.ts";
 import { importCameras } from "./cameras.ts";
+import { cameraIntegrations, integrationConfig } from "./integrations.ts";
 import { buildRoutes, streets } from "./routing.ts";
 import { suggestCameras, suggestionInput } from "./suggestions.ts";
 
@@ -205,6 +206,17 @@ export async function createApp(
   });
 
   const io = new Server(app.server, { maxHttpBufferSize: 16384 });
+  const integrations = cameraIntegrations(
+    db,
+    integrationConfig(options.test ? {} : process.env),
+    () => io.emit("refresh"),
+  );
+  app.addHook("onReady", async () => {
+    if (!options.test) integrations.start();
+  });
+  app.addHook("onClose", async () => {
+    await integrations.close();
+  });
   io.use(async (socket, next) => {
     try {
       const token = app.parseCookie(socket.handshake.headers.cookie || "")[SID];
@@ -439,7 +451,21 @@ export async function createApp(
     if (!isStaff(req.user)) return []; // External views receive only sightings from their own cases.
     return (
       await db.query("SELECT * FROM cameras WHERE active=true ORDER BY number")
-    ).rows;
+    ).rows.map(integrations.health);
+  });
+  app.get("/api/integrations/cameras", async (req) => {
+    admin(req);
+    return integrations.status();
+  });
+  app.post("/api/integrations/cameras/:source/run", async (req) => {
+    admin(req);
+    const { source } = z
+      .object({ source: z.enum(["mymaps", "hikcentral"]) })
+      .parse(req.params);
+    if (!integrations.configured[source])
+      fail(409, "La integración todavía no está configurada en el servidor.");
+    await integrations.run(source);
+    return integrations.status();
   });
   app.post("/api/cameras/import", async (req) => {
     admin(req);
@@ -452,7 +478,7 @@ export async function createApp(
     admin(req);
     return (
       await db.query(
-        "SELECT a.*,u.name AS author FROM audit a JOIN users u ON u.id=a.user_id WHERE action='camera_sync' ORDER BY created_at DESC LIMIT 30",
+        "SELECT a.*,COALESCE(u.name,'Sincronización automática') AS author FROM audit a LEFT JOIN users u ON u.id=a.user_id WHERE action='camera_sync' ORDER BY created_at DESC LIMIT 30",
       )
     ).rows;
   });

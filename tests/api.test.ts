@@ -91,6 +91,23 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
   assert.equal((await req("externoa", "GET", "/api/users")).statusCode, 403);
   assert.deepEqual((await req("externoa", "GET", "/api/cameras")).json(), []);
   assert.equal(
+    (await req("externoa", "GET", "/api/integrations/cameras")).statusCode,
+    403,
+  );
+  assert.equal(
+    (await req("operador", "POST", "/api/integrations/cameras/mymaps/run"))
+      .statusCode,
+    403,
+  );
+  const integrations = await req("admin", "GET", "/api/integrations/cameras");
+  assert.equal(integrations.statusCode, 200);
+  assert.ok(integrations.json().every((s: any) => s.configured === false));
+  assert.equal(
+    (await req("admin", "POST", "/api/integrations/cameras/hikcentral/run"))
+      .statusCode,
+    409,
+  );
+  assert.equal(
     (
       await req("externoa", "POST", "/api/departments", {
         name: "No permitido",

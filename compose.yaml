@@ -20,6 +20,13 @@ services:
       DATABASE_URL: postgres://rastreo:${POSTGRES_PASSWORD}@db:5432/rastreo
       APP_ORIGIN: https://${DOMAIN:?Definir DOMAIN}
       UPLOAD_DIR: /app/uploads
+      MY_MAPS_ID: ${MY_MAPS_ID:-}
+      MY_MAPS_INTERVAL_SECONDS: ${MY_MAPS_INTERVAL_SECONDS:-300}
+      HIK_OPENAPI_URL: ${HIK_OPENAPI_URL:-}
+      HIK_APP_KEY: ${HIK_APP_KEY:-}
+      HIK_APP_SECRET: ${HIK_APP_SECRET:-}
+      HIK_INTERVAL_SECONDS: ${HIK_INTERVAL_SECONDS:-60}
+      HIK_CAMERA_MAPPING: ${HIK_CAMERA_MAPPING:-}
     volumes:
       - uploads:/app/uploads
     depends_on:

@@ -132,12 +132,35 @@ Mantener una única instancia de la aplicación en esta etapa. La presencia y la
 
 Respaldar tanto PostgreSQL (`pg_dump`) como el volumen `uploads` y conservar copias fuera del servidor. Probar restauraciones. Los volúmenes persisten al actualizar contenedores. No ejecutar `docker compose down -v` sobre una instalación con datos.
 
+## Sincronización de cámaras y estado de conexión
+
+En **Administración → Sincronización de cámaras** se ven la última consulta correcta, errores, conflictos y botones para consultar inmediatamente. Sólo administradores pueden gestionar estas integraciones. El servidor consulta los servicios y avisa a los navegadores conectados. Debe permanecer encendido.
+
+### Google My Maps
+
+Configurar `MY_MAPS_ID` en `.env` con el valor `mid` del enlace del mapa. El mapa debe permitir descargar su KML sin iniciar sesión. `MY_MAPS_INTERVAL_SECONDS=300` establece una consulta cada cinco minutos, también al iniciar el servidor.
+
+Se reconocen puntos con nombre `CAM-número`, se agregan cámaras y se actualizan sus nombres y posiciones. Las bajas desactivan el registro sin borrar capturas ni sus ubicaciones históricas. Números duplicados se muestran como conflictos: se conserva su registro anterior si existía y no se elige una ubicación arbitraria. Corregirlos en My Maps permite incorporarlos en la siguiente consulta. Un archivo vacío, inválido o con nombres no reconocidos conserva el catálogo anterior. Si un cambio elimina más del 25% de las cámaras activas, la sincronización automática se detiene hasta revisar el origen; una importación manual válida permite aplicar un cambio masivo intencional. Las sincronizaciones sin cambios no generan auditorías repetidas.
+
+### HikCentral OpenAPI
+
+1. En HikCentral, con un administrador, verificar **Configuración del sistema → Integración con terceros → OpenAPI**. El nombre depende de la versión. Habilitar el servicio y un usuario asociado con permiso de lectura sobre las cámaras. Algunas versiones requieren instalar el paquete OpenAPI correspondiente desde el servidor de HikCentral.
+2. Obtener la dirección HTTPS y puerto de OpenAPI, AppKey y AppSecret. La dirección del portal `/#/portal` puede corresponder a otro servicio. Configurar localmente en `.env` las variables `HIK_OPENAPI_URL`, `HIK_APP_KEY` y `HIK_APP_SECRET`. No subir ese archivo a Git ni pegar claves en mensajes. Reiniciar la aplicación después de editar la configuración.
+3. Abrir Administración y pulsar **Consultar estados**. La consulta se repite cada `HIK_INTERVAL_SECONDS` (60 segundos por defecto).
+
+El conector consulta `POST /artemis/api/resource/v1/cameras` con firma HMAC-SHA256 y todas sus páginas. Interpreta el campo `status` documentado como `0=desconocido`, `1=en línea`, `2=fuera de línea`. Requiere HTTPS y un certificado de confianza. Si se usa una CA privada, proporcionar su certificado con `NODE_EXTRA_CA_CERTS` al iniciar Node; no se desactiva la validación TLS.
+
+La vinculación automática usa el prefijo `CAM-número` del nombre de HikCentral, sólo si es único. Para nombres distintos o números repetidos se puede configurar `HIK_CAMERA_MAPPING='{"276":"cameraIndexCode-en-HikCentral"}'`. No admite que dos números compartan el mismo identificador explícito. Cámaras sin correspondencia o sin permisos de lectura quedan sin información, nunca se consideran caídas por estar ausentes de la respuesta.
+
+El borde del punto en el mapa indica conexión actual: verde en línea, rojo fuera de línea, gris sin información reciente. El relleno conserva los colores de capturas y revisiones. Una consulta fallida conserva los datos anteriores; después de tres intervalos (mínimo tres minutos) el estado se presenta como desconocido. Las respuestas incompletas no se aplican parcialmente. La conexión no garantiza imagen correcta ni grabación disponible. Las sugerencias de búsqueda histórica no excluyen cámaras por su estado actual.
+
+Contrato implementado según la documentación oficial de Hikvision: [habilitar OpenAPI](https://enpinfo.hikvision.com/hkwsen/unzip/20240201150721_74009_doc/GUID-223990A6-B9D0-49FC-9249-3E24BC77F926.html), [autenticación](https://enpinfo.hikvision.com/hkwsen/unzip/20240201150721_74009_doc/GUID-AC08DDFF-62E1-48F6-8D12-1DE85DDCDB20.html), [catálogo paginado](https://enpinfo.hikvision.com/hkwsen/unzip/20240201150721_74009_doc/GUID-806B9EF1-0102-45BF-AC1D-C4A079DA4792.html) y [CameraInfo/status](https://enpinfo.hikvision.com/hkwsen/unzip/20240201150721_74009_doc/GUID-5374ABDC-351D-4C41-B706-62622445E40E.html). Es necesario verificarlo contra la versión y permisos de la instalación antes de dar por conectada la integración real.
+
 ## Pendientes respecto del concepto
 
-- Sincronización programada desde My Maps: por ahora se importa KML manualmente.
-- Sugerencias de próximas cámaras y ventanas de tiempo, Telegram, informe PDF e infografía PNG.
+- Telegram, informe PDF e infografía PNG.
 - PWA instalable y trabajo con conectividad intermitente.
-- TOTP/2FA, retención configurable, prioridades y plazos, integración HikCentral y modo evidencia.
+- TOTP/2FA, retención configurable, prioridades y plazos, validación de HikCentral en la instalación municipal y modo evidencia.
 - Edición de registros existentes con historial de versiones: hoy se corrigen ocultando el registro y agregando uno nuevo.
 - Menciones a usuarios desconectados: actualmente se elige entre los presentes.
 - Teselas PMTiles: el mapa inicial usa GeoJSON local de las calles extraídas del prototipo.

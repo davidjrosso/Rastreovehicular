@@ -68,11 +68,17 @@ export function parseKml(source: string) {
 export async function importCameras(
   db: DB,
   source: string,
-  userId: string,
+  userId: string | null,
   skipAmbiguous = false,
+  automatic = false,
 ) {
   const parsed = parseKml(source);
   if (!parsed.cameras.length) fail(400, "El KML no contiene cámaras válidas");
+  if (automatic && parsed.invalid.length)
+    fail(
+      400,
+      "My Maps contiene nombres o coordenadas inválidos. Se conserva el catálogo anterior.",
+    );
   if (!skipAmbiguous && (parsed.invalid.length || parsed.duplicates.length)) {
     fail(
       400,
@@ -86,38 +92,54 @@ export async function importCameras(
   return db.transaction(async (tx) => {
     await tx.query("SELECT pg_advisory_xact_lock(20261021)");
     const previous = (await tx.query("SELECT * FROM cameras")).rows;
+    // An ambiguous number must never overwrite or remove its existing position.
+    const numbers = [...incoming.map((c) => c.number), ...parsed.duplicates];
+    const removed = previous.filter(
+      (p) => p.active && !numbers.includes(p.number),
+    ).length;
+    if (automatic && removed > previous.filter((p) => p.active).length * 0.25)
+      fail(
+        400,
+        "My Maps quitaría más del 25% del catálogo. Revisá el mapa e importá el KML manualmente si el cambio es correcto.",
+      );
     let added = 0,
-      moved = 0;
+      moved = 0,
+      renamed = 0,
+      reactivated = 0;
     for (const c of incoming) {
       const old = previous.find((p) => p.number === c.number);
       if (!old) added++;
       else if (old.lat !== c.lat || old.lon !== c.lon) moved++;
+      if (old && old.name !== c.name) renamed++;
+      if (old && !old.active) reactivated++;
       await tx.query(
         `INSERT INTO cameras(id,number,name,lon,lat) VALUES($1,$2,$3,$4,$5)
-        ON CONFLICT(number) DO UPDATE SET name=$3,lon=$4,lat=$5,active=true,updated_at=now()`,
+        ON CONFLICT(number) DO UPDATE SET name=$3,lon=$4,lat=$5,active=true,updated_at=now()
+        WHERE cameras.name IS DISTINCT FROM $3 OR cameras.lon IS DISTINCT FROM $4
+          OR cameras.lat IS DISTINCT FROM $5 OR NOT cameras.active`,
         [randomUUID(), c.number, c.name, c.lon, c.lat],
       );
     }
-    const numbers = incoming.map((c) => c.number);
-    const removed = previous.filter(
-      (p) => p.active && !numbers.includes(p.number),
-    ).length;
     await tx.query(
-      "UPDATE cameras SET active=false,updated_at=now() WHERE NOT (number=ANY($1::int[]))",
+      "UPDATE cameras SET active=false,updated_at=now() WHERE active AND NOT (number=ANY($1::int[]))",
       [numbers],
     );
     const summary = {
       total: incoming.length,
       added,
       moved,
+      renamed,
+      reactivated,
       removed,
+      automatic,
       duplicates: parsed.duplicates,
       invalid: parsed.invalid,
     };
-    await tx.query(
-      "INSERT INTO audit(id,user_id,action,detail) VALUES($1,$2,$3,$4)",
-      [randomUUID(), userId, "camera_sync", JSON.stringify(summary)],
-    );
+    if (!automatic || added || moved || renamed || reactivated || removed)
+      await tx.query(
+        "INSERT INTO audit(id,user_id,action,detail) VALUES($1,$2,$3,$4)",
+        [randomUUID(), userId, "camera_sync", JSON.stringify(summary)],
+      );
     return summary;
   });
 }

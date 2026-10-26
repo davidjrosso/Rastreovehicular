@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { CityMap } from "./Map";
 import { matchesCamera, normalizeClock } from "./form-utils";
+import { CameraHealth } from "./CameraHealth";
 
 export function CameraPicker({
   cameras,
@@ -62,6 +63,7 @@ export function CameraPicker({
               }
             />
             <strong>CAM-{camera.number}</strong>
+            <CameraHealth camera={camera} />
             <span>
               {camera.name
                 .replace(/^CAM[-_ ]?\d+[_ ]?/i, "")

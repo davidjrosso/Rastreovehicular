@@ -30,6 +30,8 @@ import { api, fmt, iso, localTime, roles, states } from "./api";
 import { CityMap } from "./Map";
 import { CameraPicker, DateTimeField, PlaceFields } from "./inputs";
 import { Suggestions } from "./Suggestions";
+import { CameraIntegrations } from "./CameraIntegrations";
+import { CameraHealth } from "./CameraHealth";
 import "./style.css";
 
 type Row = Record<string, any>;
@@ -297,6 +299,13 @@ function App() {
     if (!user) return;
     void refresh();
     const socket = io();
+    const healthTimer = setInterval(() => {
+      // Re-render expiration even if the server becomes unreachable.
+      setCameras((previous) => [...previous]);
+      void api("/cameras")
+        .then(setCameras)
+        .catch(() => {});
+    }, 30000);
     let timer: ReturnType<typeof setTimeout>;
     socket.on("refresh", () => {
       clearTimeout(timer);
@@ -309,6 +318,7 @@ function App() {
       setRevision((v) => v + 1);
     });
     return () => {
+      clearInterval(healthTimer);
       clearTimeout(timer);
       socket.disconnect();
     };
@@ -652,7 +662,10 @@ function App() {
                 <div>
                   <span className="eyebrow">INFRAESTRUCTURA DE MONITOREO</span>
                   <h1>Red de cámaras</h1>
-                  <p>{cameras.length} cámaras activas en Río Tercero.</p>
+                  <p>
+                    {cameras.length} cámaras en el registro de Río Tercero.
+                    Estado de conexión actual junto a cada cámara.
+                  </p>
                 </div>
               </div>
               <CityMap
@@ -683,6 +696,7 @@ function App() {
                     <div key={c.id}>
                       <Camera size={16} />
                       <strong>CAM-{c.number}</strong>
+                      <CameraHealth camera={c} />
                       <span>
                         {c.name
                           .replace(/^CAM[-_ ]?\d+[_ ]?/i, "")
@@ -1857,6 +1871,7 @@ function Admin({
           <p>Usuarios, dependencias y actualización del registro de cámaras.</p>
         </div>
       </div>
+      <CameraIntegrations />
       {error && (
         <p role="alert" className="form-error">
           {error}
