@@ -483,6 +483,19 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
     404,
   );
   const download = await req("externoa", "GET", `/api/attachments/${fileId}`);
+  const inline = await req(
+    "externoa",
+    "GET",
+    `/api/attachments/${fileId}?inline=1`,
+  );
+  assert.equal(inline.statusCode, 200);
+  assert.equal(inline.headers["content-type"], "application/octet-stream");
+  assert.match(String(inline.headers["content-disposition"]), /^attachment;/);
+  assert.equal(
+    (await req("externob", "GET", `/api/attachments/${fileId}?inline=1`))
+      .statusCode,
+    404,
+  );
   assert.equal(download.body, "Archivo de prueba");
   assert.equal(download.headers["content-type"], "application/octet-stream");
   const csv = await req("externoa", "GET", `${base}/export/csv`);
@@ -532,6 +545,28 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
     -64.117,
   );
   assert.equal(detail.attachments[0].sha256.length, 64);
+  const reportResponse = await req("operador", "GET", `${base}/report`);
+  assert.equal(reportResponse.statusCode, 200, reportResponse.body);
+  const report = reportResponse.json();
+  assert.equal(report.department_name, "Comisaría A");
+  assert.equal(report.generated_by, "operador");
+  assert.ok(Number.isFinite(Date.parse(report.generated_at)));
+  assert.ok(
+    report.entries.every((e: any) => e.kind !== "mensaje" && !e.deleted_at),
+  );
+  assert.equal(report.history, undefined);
+  assert.equal(
+    report.entries.find((e: any) => e.id === captureId).payload.cameras[0].lon,
+    -64.117,
+  );
+  assert.equal(report.suggestions.length, report.targets.length);
+  assert.equal(
+    (await req("externob", "GET", `${base}/report`)).statusCode,
+    404,
+  );
+  const externalReport = await req("externoa", "GET", `${base}/report`);
+  assert.equal(externalReport.statusCode, 200);
+  assert.deepEqual(externalReport.json().suggestions, []);
 
   assert.equal(
     (await req("operador", "POST", `${base}/state`, { status: "en_revision" }))
@@ -582,10 +617,21 @@ test("flujo completo, aislamiento, archivos, estados e historial", async (t) => 
   );
   await req("operador", "POST", `${base}/state`, { status: "en_revision" });
   await req("admin", "POST", `${base}/state`, { status: "entregada" });
+  const deliveredReport = (
+    await req("operador", "GET", `${base}/report`)
+  ).json();
+  assert.equal(deliveredReport.status, "entregada");
+  assert.ok(!deliveredReport.entries.some((e: any) => e.id === captureId));
+  assert.ok(!deliveredReport.attachments.some((a: any) => a.id === fileId));
+  assert.ok(report.entries.some((e: any) => e.id === captureId)); // Earlier response remains a snapshot.
   assert.equal(
     (await req("admin", "POST", `${base}/state`, { status: "archivada" }))
       .statusCode,
     200,
+  );
+  assert.equal(
+    (await req("externoa", "GET", `${base}/report`)).json().status,
+    "archivada",
   );
   assert.equal(
     (

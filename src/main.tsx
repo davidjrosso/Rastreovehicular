@@ -33,6 +33,7 @@ import { Suggestions } from "./Suggestions";
 import { CameraIntegrations } from "./CameraIntegrations";
 import { CameraHealth } from "./CameraHealth";
 import { RecordingPanel } from "./Recordings";
+import { Reports } from "./Reports";
 import "./style.css";
 
 type Row = Record<string, any>;
@@ -240,7 +241,11 @@ function Login({ onLogin }: { onLogin: () => void }) {
 function App() {
   const [user, setUser] = useState<Row | null>(null),
     [loading, setLoading] = useState(true);
-  const [page, setPage] = useState("cases"),
+  const [page, setPage] = useState(() =>
+      new URLSearchParams(window.location.search).get("vista") === "informes"
+        ? "reports"
+        : "cases",
+    ),
     [selected, setSelected] = useState<string | null>(() =>
       new URLSearchParams(window.location.search).get("busqueda"),
     );
@@ -255,14 +260,15 @@ function App() {
     [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   useEffect(() => {
+    const params = new URLSearchParams();
+    if (page === "reports") params.set("vista", "informes");
+    if (selected) params.set("busqueda", selected);
     window.history.replaceState(
       null,
       "",
-      selected
-        ? `?busqueda=${encodeURIComponent(selected)}`
-        : window.location.pathname,
+      `${window.location.pathname}${params.size ? `?${params}` : ""}`,
     );
-  }, [selected]);
+  }, [selected, page]);
   const me = useCallback(async () => {
     setLoading(true);
     try {
@@ -381,6 +387,12 @@ function App() {
               Cámaras
             </button>
           )}
+          <button
+            className={page === "reports" ? "active" : ""}
+            onClick={() => go("reports")}
+          >
+            <FileText size={19} /> INFORMES
+          </button>
           {user.role === "admin" && (
             <button
               className={page === "admin" ? "active" : ""}
@@ -426,9 +438,11 @@ function App() {
             <b>
               {page === "admin"
                 ? "Administración"
-                : page === "cameras"
-                  ? "Red de cámaras"
-                  : "Búsquedas"}
+                : page === "reports"
+                  ? "Informes"
+                  : page === "cameras"
+                    ? "Red de cámaras"
+                    : "Búsquedas"}
             </b>
           </span>
           <div className="topbar-actions">
@@ -489,6 +503,17 @@ function App() {
           </div>
         )}
         <main>
+          {page === "reports" && (
+            <Reports
+              cases={cases}
+              selected={selected}
+              select={setSelected}
+              openCase={(id) => {
+                setPage("cases");
+                setSelected(id);
+              }}
+            />
+          )}
           {page === "cases" &&
             (selected ? (
               <CaseDetail

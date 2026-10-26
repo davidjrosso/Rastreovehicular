@@ -554,27 +554,27 @@ export async function createApp(
     changed(caseId);
     return record;
   });
-  async function detail(caseId: string, user: User) {
-    const c = await access(db, caseId, user);
+  async function detail(caseId: string, user: User, reader: DB = db) {
+    const c = await access(reader, caseId, user);
     const [targets, entries, history, attachments, routeNotes] =
       await Promise.all([
-        db.query(
+        reader.query(
           "SELECT * FROM targets WHERE case_id=$1 ORDER BY description",
           [caseId],
         ),
-        db.query(
+        reader.query(
           "SELECT e.*,u.name AS author FROM entries e JOIN users u ON u.id=e.user_id WHERE case_id=$1 AND deleted_at IS NULL ORDER BY e.created_at",
           [caseId],
         ),
-        db.query(
+        reader.query(
           "SELECT a.*,u.name AS author FROM audit a JOIN users u ON u.id=a.user_id WHERE case_id=$1 ORDER BY a.created_at DESC",
           [caseId],
         ),
-        db.query(
+        reader.query(
           "SELECT a.* FROM attachments a JOIN entries e ON e.id=a.entry_id WHERE a.case_id=$1 AND e.deleted_at IS NULL ORDER BY a.created_at",
           [caseId],
         ),
-        db.query(
+        reader.query(
           "SELECT n.*,u.name AS author FROM route_notes n JOIN users u ON u.id=n.user_id WHERE n.case_id=$1 ORDER BY n.created_at",
           [caseId],
         ),
@@ -593,6 +593,53 @@ export async function createApp(
   app.get("/api/cases/:id", async (req) =>
     detail((req.params as any).id, req.user),
   );
+  app.get("/api/cases/:id/report", async (req) => {
+    const snapshot = await db.transaction(async (tx) => {
+      await tx.query(
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+      );
+      const c = await detail((req.params as any).id, req.user, tx);
+      const department = (
+        await tx.query("SELECT name FROM departments WHERE id=$1", [
+          (c as Record<string, any>).department_id,
+        ])
+      ).rows[0];
+      const cameras = isStaff(req.user)
+        ? (
+            await tx.query(
+              "SELECT id,number,name,lon,lat FROM cameras WHERE active=true ORDER BY number",
+            )
+          ).rows
+        : [];
+      const generated = (await tx.query("SELECT transaction_timestamp() AS at"))
+        .rows[0].at;
+      return { c, cameras, department, generated };
+    });
+    const { c, cameras, department, generated } = snapshot;
+    const entries = c.entries.filter((e) => e.kind !== "mensaje");
+    const entryIds = new Set(entries.map((e) => e.id));
+    // A report is a fixed read snapshot. No live camera status or playback credentials.
+    return {
+      ...c,
+      entries,
+      attachments: c.attachments.filter((a) => entryIds.has(a.entry_id)),
+      history: undefined,
+      department_name: department?.name || "",
+      generated_at: generated,
+      generated_by: req.user.name,
+      suggestions: isStaff(req.user)
+        ? c.targets.map((target) =>
+            suggestCameras(c, target, cameras, {
+              target_id: target.id,
+              mode: "direccion",
+              heading: "auto",
+              horizon_minutes: 15,
+              delay_minutes: 0,
+            }),
+          )
+        : [],
+    };
+  });
   app.post("/api/cases/:id/suggestions", async (req) => {
     const c = await detail((req.params as any).id, req.user);
     if (!isStaff(req.user))
@@ -997,11 +1044,14 @@ export async function createApp(
     ).rows[0];
     if (!a) fail(404, "Adjunto no encontrado");
     await access(db, a.case_id, req.user);
+    const inlineImage =
+      (req.query as any).inline === "1" &&
+      ["image/jpeg", "image/png", "image/webp"].includes(a.mime);
     reply
-      .type("application/octet-stream")
+      .type(inlineImage ? a.mime : "application/octet-stream")
       .header(
         "Content-Disposition",
-        `attachment; filename*=UTF-8''${encodeURIComponent(a.name)}`,
+        `${inlineImage ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(a.name)}`,
       );
     return reply.send(createReadStream(resolve(uploads, a.id)));
   });

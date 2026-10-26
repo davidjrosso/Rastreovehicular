@@ -20,6 +20,7 @@ Primera implementación del sistema de trabajo colaborativo para la sala de moni
 - Historial de estados, registros y adjuntos; eliminación lógica de registros.
 - CSV con separador `;`, hora argentina y protección contra fórmulas; KML con capturas, lugares y recorridos. Ambos exportes incluyen los motivos de incertidumbre; KML no dibuja los tramos inciertos.
 - Administración de usuarios, desactivación y restablecimiento de contraseñas, dependencias e importación de KML.
+- Menú **INFORMES** con todas las búsquedas autorizadas, filtro por estado y búsqueda por número, título, expediente o dependencia. Reportes de situación con mapa vectorial, cronología numerada, imágenes, incertidumbres y sugerencias; impresión y guardado como PDF desde el navegador.
 
 Es una versión inicial para probar el flujo de trabajo. No es un sistema de evidencia judicial.
 
@@ -88,6 +89,16 @@ Las calles incluidas son la copia de octubre de 2026 del prototipo suministrado.
 7. El operador envía a revisión; el supervisor devuelve o entrega y luego archiva.
 
 En búsquedas archivadas no se admiten nuevas escrituras. Un supervisor puede reabrirlas con motivo. Los usuarios desactivados pierden sus sesiones.
+
+## Informes de situación
+
+En **INFORMES**, seleccionar cualquier búsqueda, en curso o cerrada. La portada presenta estado, período del evento, fecha de corte, indicadores y un mapa cuyos hitos corresponden a la cronología. El detalle incluye contexto, primeras y últimas apariciones confirmadas por objetivo, revisiones sin resultado, anotaciones de incertidumbre, aportes particulares y adjuntos de imagen. Los videos se enumeran para consultarlos en la búsqueda.
+
+El reporte usa una lectura consistente de la base y queda fijo mientras se revisa. **Volver a generar** incorpora los cambios posteriores. Permite filtrar por objetivo, incluir u ocultar imágenes y sugerencias, y añadir una conclusión para esa emisión. La conclusión se conserva mientras esa vista permanezca abierta, pero no se guarda en la búsqueda ni en el servidor. El PDF descargado conserva el contenido emitido; la aplicación no almacena un historial de PDFs.
+
+**Imprimir / guardar PDF** abre el diálogo del navegador. Elegir Guardar como PDF, papel A4 y desactivar encabezados y pies del navegador. El mapa es vectorial y usa las ubicaciones históricas de las capturas, sin depender de una captura WebGL o de servicios cartográficos externos. Los tramos inciertos no se dibujan y las demás líneas se identifican como estimaciones. Los puntos probables y dudosos se distinguen de los confirmados; los aportes particulares no se convierten en confirmaciones.
+
+Las sugerencias, visibles sólo para la sala, se recalculan con el catálogo al generar el informe y usan dirección automática, horizonte de 15 minutos y los supuestos indicados en el propio reporte. No constituyen avistamientos ni garantizan disponibilidad histórica de grabación. Los externos sólo acceden a informes y adjuntos de su dependencia. El chat queda fuera del informe.
 
 ## Verificación
 
@@ -172,7 +183,7 @@ Contrato implementado según la documentación oficial de Hikvision: [habilitar 
 
 ## Pendientes respecto del concepto
 
-- Telegram, informe PDF e infografía PNG.
+- Telegram e infografía PNG independiente (el informe visual ya se puede guardar como PDF).
 - PWA instalable y trabajo con conectividad intermitente.
 - TOTP/2FA, retención configurable, prioridades y plazos y modo evidencia.
 - Edición de registros existentes con historial de versiones: hoy se corrigen ocultando el registro y agregando uno nuevo.
