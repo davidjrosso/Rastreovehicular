@@ -11,7 +11,9 @@
     "build": "tsc --noEmit && vite build",
     "start": "tsx server/index.ts",
     "test": "tsx --test tests/*.test.ts",
-    "bootstrap": "tsx server/bootstrap.ts"
+    "bootstrap": "tsx server/bootstrap.ts",
+    "secrets:check": "node scripts/production-secrets.mjs check",
+    "secrets:send": "node scripts/production-secrets.mjs send"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.14",

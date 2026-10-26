@@ -1,7 +1,12 @@
 node_modules
 .git
 .local
-.env
+.env*
+secrets
+.secrets
+*.private.env
+hikcentral.env
+production.env
 data
 uploads
 dist

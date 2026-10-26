@@ -105,7 +105,7 @@ Las pruebas usan una base efímera PGlite. Para probar PostgreSQL real, apuntar 
 
 El esquema preparado es Node/Fastify + PostgreSQL 16 + Caddy, con Docker Compose.
 
-Crear `.env` con:
+Guardar la configuración fuera del repositorio, en `~/.config/rastreo/production.env`, con permisos `600`:
 
 ```dotenv
 DOMAIN=rastreo.ejemplo.gob.ar
@@ -115,13 +115,15 @@ POSTGRES_PASSWORD=REEMPLAZAR_POR_UN_SECRETO_ALEATORIO
 Usar una contraseña alfanumérica aleatoria larga para evitar problemas de escape en la URL de conexión. Apuntar el DNS al servidor y habilitar 80/443.
 
 ```sh
-docker compose up -d --build
+docker compose --env-file "$HOME/.config/rastreo/production.env" --env-file "$HOME/.config/rastreo/hikcentral.env" up -d --build
 ```
+
+Las claves de HikCentral y My Maps se envían directamente desde esta PC por SSH a `~/.config/rastreo/hikcentral.env`. Ver [Claves privadas en producción](docs/PRODUCCION-CLAVES.md) para verificar, enviar y actualizar la configuración sin pasarla por Git. Si no se configuran integraciones, omitir el segundo `--env-file`.
 
 Crear el administrador con las variables de bootstrap suministradas desde el entorno de la terminal:
 
 ```sh
-docker compose exec -e BOOTSTRAP_USER -e BOOTSTRAP_PASSWORD app node --import tsx server/bootstrap.ts
+docker compose --env-file "$HOME/.config/rastreo/production.env" --env-file "$HOME/.config/rastreo/hikcentral.env" exec -e BOOTSTRAP_USER -e BOOTSTRAP_PASSWORD app node --import tsx server/bootstrap.ts
 ```
 
 Las variables deben estar exportadas en la terminal desde la que se ejecuta el comando; no escribir claves en scripts versionados. Importar luego las cámaras desde la interfaz.
