@@ -11,6 +11,7 @@ import { api, fmt, states } from "./api";
 import { reportModel, certaintyLabels } from "./report-model";
 import { ReportMap } from "./ReportMap";
 import { EvidenceSource } from "./evidence-source";
+import { lineStyles } from "../shared/route-edit";
 import "./reports.css";
 type Row = Record<string, any>;
 const cameraNames = (entry: Row) =>
@@ -455,7 +456,9 @@ function SituationReport({
                 <span>
                   <i style={{ background: "#ac6928" }} /> Lugar o aporte
                 </span>
-                <span>┄ Línea: recorrido estimado por calles</span>
+                <span>
+                  Estilos de línea elegidos por tramo; no indican certeza.
+                </span>
               </div>
               <div className="report-targets">
                 {model.targets.map((t) => (
@@ -467,15 +470,58 @@ function SituationReport({
                 ))}
               </div>
               <p className="report-footnote">
-                Las líneas son estimaciones, no trayectos acreditados. Los
-                tramos marcados como inciertos no se dibujan. La conexión actual
-                de una cámara no acredita grabación en la fecha del hecho.
+                Las líneas muestran estimaciones o trazados manuales del
+                operador, no trayectos acreditados. Los tramos marcados como
+                inciertos no se dibujan. La conexión actual de una cámara no
+                acredita grabación en la fecha del hecho.
               </p>
             </section>
 
             <section className="report-section report-context">
               <h2>02 / Contexto y hallazgos</h2>
               <p className="report-preserve">{data.description}</p>
+              {!!data.inactive_route_edits && (
+                <p className="report-caution">
+                  Hay {data.inactive_route_edits} edición(es) de tramos
+                  anteriores sin aplicar porque cambiaron las capturas
+                  consecutivas. Revisar el recorrido actualizado.
+                </p>
+              )}
+              {model.routes.flatMap((r) =>
+                r.legs
+                  .filter(
+                    (l: Row) =>
+                      !l.uncertain &&
+                      (l.manual || l.line_style === "hidden" || l.route_note),
+                  )
+                  .map((l: Row) => (
+                    <p
+                      className="report-preserve"
+                      key={`${r.target_id}-${l.from}-${l.to}`}
+                    >
+                      <b>
+                        {r.description} ·{" "}
+                        {l.manual ? "Trazado manual" : "Tramo calculado"}
+                      </b>{" "}
+                      ·{" "}
+                      {fmt(
+                        data.entries.find((e: Row) => e.id === l.from).payload
+                          .at,
+                      )}{" "}
+                      →{" "}
+                      {fmt(
+                        data.entries.find((e: Row) => e.id === l.to).payload.at,
+                      )}{" "}
+                      ·{" "}
+                      {
+                        lineStyles[
+                          (l.line_style || "dashed") as keyof typeof lineStyles
+                        ]
+                      }
+                      . {l.route_note}
+                    </p>
+                  )),
+              )}
               {model.targets.map((t) => {
                 const observations = model.timeline.filter(
                   (e) =>

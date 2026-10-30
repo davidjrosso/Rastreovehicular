@@ -24,6 +24,16 @@ Primera implementación del sistema de trabajo colaborativo para la sala de moni
 
 Es una versión inicial para probar el flujo de trabajo. No es un sistema de evidencia judicial.
 
+## Corregir títulos y recorridos
+
+**Editar título**, debajo del nombre de la búsqueda, permite corregirlo sin cambiar su número ni sus registros. El personal de sala puede hacerlo en cualquier estado; un usuario externo sólo puede corregir su propio pedido mientras esté pendiente. Se conserva el título anterior y el autor del cambio en el historial. Si otro operador lo modificó mientras estaba abierto el formulario, se solicita volver a abrir la edición.
+
+En una búsqueda **en curso**, debajo del mapa cada tramo entre capturas consecutivas tiene **Editar trazado y línea**. Arrastrar la línea agrega un punto en ese lugar; arrastrar los puntos blancos ajusta el recorrido. Clic derecho o Supr elimina un punto; **Deshacer punto** revierte hasta treinta pasos. Los extremos A/B permanecen anclados a las posiciones históricas de las capturas. **Empezar con línea directa** deja sólo esos extremos para dibujar un camino nuevo. El trazado manual no recalcula por calles ni impone manos de circulación: permite pasos peatonales, contramano y caminos que no figuran en el grafo. Admite hasta 5.000 puntos y 200 km por tramo; en trazados extensos se muestran hasta unos 250 puntos de control, pudiendo insertar nuevos al arrastrar cualquier parte de la línea.
+
+El estilo se elige de forma independiente por tramo: **Continua**, **Discontinua**, **Punteada** o **Sin línea**. El estilo no modifica la certeza de las capturas. Se puede cambiar sólo el estilo conservando el cálculo automático. **Restablecer cálculo automático** elimina el trazado manual, la observación y el estilo elegido y vuelve al predeterminado discontinuo. Las ediciones, sus versiones y su autor se conservan en el historial; las escrituras concurrentes no sobrescriben cambios ajenos.
+
+El mapa y los informes PDF conservan los trazados y estilos guardados, y distinguen los recorridos manuales de los calculados. KML conserva la geometría manual y omite los tramos sin línea; el estilo de guiones se describe como texto porque KML no lo representa. Un tramo marcado incierto sigue sin dibujarse: primero hay que retirar esa anotación para editarlo. Si se agrega o elimina una captura intermedia, el trazado antiguo no se aplica a un par diferente de eventos y aparece un aviso para revisar los tramos nuevos. Las búsquedas cerradas deben reabrirse para cambiar su recorrido.
+
 ## Desarrollo local
 
 Requiere **Node.js 24 LTS** (mínimo 22.12). No hace falta instalar PostgreSQL para la prueba local: se usa PGlite, PostgreSQL embebido persistente, en `data/db`.

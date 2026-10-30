@@ -10,6 +10,11 @@ import {
   recordingStatus,
 } from "./recording-utils";
 import { healthColors, healthLabels, healthStatus } from "./CameraHealth";
+import {
+  nearestSegment,
+  type RoutePoint,
+  type LineStyle,
+} from "../shared/route-edit";
 
 maplibregl.setWorkerUrl(workerUrl);
 
@@ -21,6 +26,7 @@ export function CityMap({
   suggestions,
   onSuggestion,
   recordings,
+  edit,
 }: {
   cameras: any[];
   detail?: any;
@@ -29,6 +35,11 @@ export function CityMap({
   suggestions?: any[];
   onSuggestion?: (suggestion: any) => void;
   recordings?: any[];
+  edit?: {
+    coordinates: RoutePoint[];
+    style: LineStyle;
+    onChange: (points: RoutePoint[]) => void;
+  };
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -40,6 +51,8 @@ export function CityMap({
   suggestionClick.current = onSuggestion;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const editRef = useRef(edit);
+  editRef.current = edit;
   const boundsKey = detail?.entries
     ?.filter(
       (e: any) =>
@@ -51,6 +64,7 @@ export function CityMap({
   useEffect(() => {
     let alive = true;
     let instance: maplibregl.Map;
+    let stopLineDrag: (() => void) | null = null;
     try {
       instance = new maplibregl.Map({
         container: container.current!,
@@ -184,11 +198,83 @@ export function CityMap({
             source: "routes",
             paint: { "line-color": "#ffffff", "line-width": 8 },
           });
+          for (const style of ["solid", "dashed", "dotted"] as const)
+            instance.addLayer({
+              id: `route-line-${style}`,
+              type: "line",
+              source: "routes",
+              filter: ["==", ["get", "style"], style],
+              layout: { "line-cap": "round" },
+              paint: {
+                "line-color": ["get", "color"],
+                "line-width": 4,
+                ...(style === "solid"
+                  ? {}
+                  : {
+                      "line-dasharray": style === "dotted" ? [0.2, 2] : [3, 2],
+                    }),
+              },
+            });
+          instance.addSource("edit-route", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
           instance.addLayer({
-            id: "route-line",
+            id: "edit-route-line",
             type: "line",
-            source: "routes",
-            paint: { "line-color": ["get", "color"], "line-width": 4 },
+            source: "edit-route",
+            layout: { "line-cap": "round" },
+            paint: {
+              "line-color": "#246bda",
+              "line-width": 7,
+              "line-opacity": 0.75,
+            },
+          });
+          instance.on("mouseenter", "edit-route-line", () => {
+            if (editRef.current) instance.getCanvas().style.cursor = "grab";
+          });
+          instance.on("mouseleave", "edit-route-line", () => {
+            instance.getCanvas().style.cursor = "";
+          });
+          instance.on("mousedown", "edit-route-line", (e) => {
+            const current = editRef.current;
+            if (
+              !current ||
+              e.originalEvent.button !== 0 ||
+              current.coordinates.length >= 5000
+            )
+              return;
+            e.preventDefault();
+            instance.dragPan.disable();
+            const point: RoutePoint = [e.lngLat.lng, e.lngLat.lat];
+            const points = current.coordinates.map((p) => [...p] as RoutePoint),
+              index = nearestSegment(points, point);
+            points.splice(index, 0, point);
+            const paint = () =>
+              (
+                instance.getSource("edit-route") as maplibregl.GeoJSONSource
+              ).setData({
+                type: "Feature",
+                properties: {},
+                geometry: { type: "LineString", coordinates: points },
+              });
+            const move = (event: maplibregl.MapMouseEvent) => {
+              points[index] = [event.lngLat.lng, event.lngLat.lat];
+              paint();
+            };
+            const end = () => {
+              instance.off("mousemove", move);
+              instance.off("mouseup", end);
+              document.removeEventListener("mouseup", end);
+              stopLineDrag = null;
+              instance.dragPan.enable();
+              if (alive) editRef.current?.onChange(points);
+            };
+            stopLineDrag = end;
+            document.addEventListener("mouseup", end, { once: true });
+            paint();
+            instance.on("mousemove", move);
+            instance.once("mouseup", end);
           });
           instance.addSource("cameras", {
             type: "geojson",
@@ -248,6 +334,7 @@ export function CityMap({
     }
     return () => {
       alive = false;
+      stopLineDrag?.();
       instance?.remove();
       map.current = null;
     };
@@ -302,10 +389,15 @@ export function CityMap({
       type: "FeatureCollection",
       features: (detail?.routes || []).flatMap((r: any) =>
         r.legs
-          .filter((l: any) => l.coordinates.length > 1)
+          .filter(
+            (l: any) => l.coordinates.length > 1 && l.line_style !== "hidden",
+          )
           .map((l: any) => ({
             type: "Feature",
-            properties: { color: l.warning ? "#be673b" : r.color },
+            properties: {
+              color: l.warning ? "#be673b" : r.color,
+              style: l.line_style || "dashed",
+            },
             geometry: { type: "LineString", coordinates: l.coordinates },
           })),
       ),
@@ -348,7 +440,7 @@ export function CityMap({
     for (const r of detail?.routes || [])
       for (const l of r.legs) {
         const coordinates = l.coordinates;
-        if (coordinates.length < 2) continue;
+        if (coordinates.length < 2 || l.line_style === "hidden") continue;
         const i = Math.max(1, Math.floor(coordinates.length / 2)),
           a = instance.project(coordinates[i - 1]),
           b = instance.project(coordinates[i]);
@@ -399,6 +491,76 @@ export function CityMap({
     return () => markers.forEach((m) => m.remove());
   }, [ready, cameras, detail, suggestions, recordings]);
   useEffect(() => {
+    if (!ready || !map.current) return;
+    const instance = map.current,
+      source = instance.getSource("edit-route") as maplibregl.GeoJSONSource;
+    source.setData(
+      edit
+        ? {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: edit.coordinates },
+          }
+        : { type: "FeatureCollection", features: [] },
+    );
+    if (!edit) return;
+    instance.setPaintProperty(
+      "edit-route-line",
+      "line-dasharray",
+      edit.style === "dotted"
+        ? [0.2, 2]
+        : edit.style === "dashed" || edit.style === "hidden"
+          ? [3, 2]
+          : [1, 0],
+    );
+    const markers: maplibregl.Marker[] = [];
+    const stride = Math.max(1, Math.ceil(edit.coordinates.length / 250));
+    edit.coordinates.forEach((p, index) => {
+      const endpoint = index === 0 || index === edit.coordinates.length - 1;
+      if (!endpoint && index % stride !== 0) return;
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = `route-handle ${endpoint ? "endpoint" : ""}`;
+      el.textContent = endpoint ? (index === 0 ? "A" : "B") : "";
+      el.title = endpoint
+        ? "Extremo fijo de la captura"
+        : "Arrastrar punto · clic derecho o Supr para quitar";
+      el.setAttribute(
+        "aria-label",
+        endpoint
+          ? `Extremo ${index === 0 ? "A" : "B"}`
+          : `Punto editable ${index}`,
+      );
+      const marker = new maplibregl.Marker({
+        element: el,
+        draggable: !endpoint,
+      })
+        .setLngLat(p)
+        .addTo(instance);
+      marker.on("dragend", () => {
+        const next = editRef.current!.coordinates.map(
+          (p) => [...p] as RoutePoint,
+        );
+        const point = marker.getLngLat();
+        next[index] = [point.lng, point.lat];
+        editRef.current?.onChange(next);
+      });
+      const remove = (e: Event) => {
+        e.preventDefault();
+        if (endpoint) return;
+        editRef.current?.onChange(
+          editRef.current.coordinates.filter((_, i) => i !== index),
+        );
+      };
+      el.addEventListener("contextmenu", remove);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Delete" || e.key === "Backspace") remove(e);
+      });
+      markers.push(marker);
+    });
+    return () => markers.forEach((m) => m.remove());
+  }, [ready, edit]);
+  useEffect(() => {
     if (!ready || !map.current || !detail?.id) return;
     const captures = detail.entries.filter((e: any) => e.kind === "captura");
     const coordinates = captures
@@ -410,14 +572,15 @@ export function CityMap({
           )
           .map((e: any) => [e.payload.lon, e.payload.lat]),
       )
-      .concat((suggestions || []).map((s) => [s.camera.lon, s.camera.lat]));
+      .concat((suggestions || []).map((s) => [s.camera.lon, s.camera.lat]))
+      .concat(editRef.current?.coordinates || []);
     if (coordinates.length) {
       const bounds = new maplibregl.LngLatBounds();
       coordinates.forEach((p: [number, number]) => bounds.extend(p));
       map.current.fitBounds(bounds, {
         padding: 80,
         maxZoom: 15,
-        duration: 400,
+        duration: editRef.current ? 0 : 400,
       });
     }
   }, [ready, detail?.id, boundsKey, suggestions]);

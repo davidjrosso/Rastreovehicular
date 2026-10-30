@@ -18,7 +18,7 @@ export function ReportMap({
       .concat(
         routes.flatMap((r) =>
           r.legs
-            .filter((l: Row) => !l.uncertain)
+            .filter((l: Row) => !l.uncertain && l.line_style !== "hidden")
             .flatMap((l: Row) => l.coordinates),
         ),
       );
@@ -135,7 +135,12 @@ export function ReportMap({
         ))}
       {routes.flatMap((r) =>
         r.legs
-          .filter((l: Row) => !l.uncertain && l.coordinates.length > 1)
+          .filter(
+            (l: Row) =>
+              !l.uncertain &&
+              l.line_style !== "hidden" &&
+              l.coordinates.length > 1,
+          )
           .map((l: Row, i: number) => (
             <path
               key={`${r.target_id}-${i}`}
@@ -143,7 +148,14 @@ export function ReportMap({
               fill="none"
               stroke={r.color}
               strokeWidth="4"
-              strokeDasharray="8 4"
+              strokeDasharray={
+                l.line_style === "solid"
+                  ? undefined
+                  : l.line_style === "dotted"
+                    ? "1 7"
+                    : "8 4"
+              }
+              strokeLinecap="round"
               opacity=".85"
             />
           )),

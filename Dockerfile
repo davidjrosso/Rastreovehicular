@@ -11,6 +11,7 @@ WORKDIR /app
 COPY --from=build /app/package*.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server ./server
+COPY --from=build /app/shared ./shared
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /app/uploads /app/data && chown -R node:node /app/uploads /app/data
 USER node

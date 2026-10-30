@@ -1,4 +1,9 @@
 import { readFileSync } from "node:fs";
+import {
+  captureCenter,
+  routeLength,
+  type LineStyle,
+} from "../shared/route-edit.ts";
 
 export type GraphData = {
   origin: number[];
@@ -20,6 +25,10 @@ export type Leg = {
   uncertain: boolean;
   notes: { id: string; reason: string }[];
   elapsed: number;
+  manual?: boolean;
+  line_style?: LineStyle;
+  override_version?: number;
+  route_note?: string;
 };
 const KX = 111320 * Math.cos((-32.17 * Math.PI) / 180);
 const KY = 110950;
@@ -211,12 +220,14 @@ export function buildRoutes(
   targets: Record<string, any>[],
   entries: Record<string, any>[],
   routeNotes: Record<string, any>[] = [],
+  overrides: Record<string, any>[] = [],
 ) {
   return targets.map((target) => {
     const captures = entries
       .filter(
         (e) =>
           e.kind === "captura" &&
+          !e.deleted_at &&
           e.payload.certainty !== "dudoso" &&
           e.payload.target_ids.includes(target.id),
       )
@@ -236,6 +247,12 @@ export function buildRoutes(
         b = captures[i];
       const p = center(a),
         q = center(b);
+      const override = overrides.find(
+        (o) =>
+          o.target_id === target.id &&
+          o.from_entry_id === a.id &&
+          o.to_entry_id === b.id,
+      );
       const elapsed =
         (Date.parse(b.payload.at) - Date.parse(a.payload.at)) / 1000;
       const notes = routeNotes.filter(
@@ -267,10 +284,25 @@ export function buildRoutes(
           return Math.hypot(v[0] - c[0], v[1] - c[1]) > 150;
         });
       });
-      const route = spread
-        ? null
-        : graph.route(p, q, false, target.kind === "persona") ||
-          graph.route(p, q, true, target.kind === "persona");
+      const manual = override?.coordinates;
+      const route = manual
+        ? {
+            coordinates: [
+              captureCenter(a),
+              ...manual.slice(1, -1),
+              captureCenter(b),
+            ] as Point[],
+            distance: routeLength([
+              captureCenter(a),
+              ...manual.slice(1, -1),
+              captureCenter(b),
+            ]),
+            contra: false,
+          }
+        : spread
+          ? null
+          : graph.route(p, q, false, target.kind === "persona") ||
+            graph.route(p, q, true, target.kind === "persona");
       const speed =
         route && elapsed > 0 ? (route.distance / elapsed) * 3.6 : null;
       const warnings: string[] = [];
@@ -294,6 +326,10 @@ export function buildRoutes(
         uncertain: false,
         notes: [],
         elapsed,
+        manual: !!manual,
+        line_style: override?.line_style || "dashed",
+        override_version: override?.version || 0,
+        route_note: override?.note || "",
       });
     }
     return {

@@ -73,6 +73,14 @@ CREATE TABLE IF NOT EXISTS route_notes (
   CHECK (ends_at >= starts_at)
 );
 CREATE INDEX IF NOT EXISTS route_notes_case ON route_notes(case_id);
+CREATE TABLE IF NOT EXISTS route_overrides (
+  case_id UUID NOT NULL REFERENCES cases(id), target_id UUID NOT NULL REFERENCES targets(id),
+  from_entry_id UUID NOT NULL REFERENCES entries(id), to_entry_id UUID NOT NULL REFERENCES entries(id),
+  coordinates JSONB, line_style TEXT NOT NULL CHECK(line_style IN ('solid','dashed','dotted','hidden')),
+  note TEXT NOT NULL DEFAULT '', user_id UUID NOT NULL REFERENCES users(id),
+  version INTEGER NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY(case_id,target_id,from_entry_id,to_entry_id)
+);
 
 ALTER TABLE audit ALTER COLUMN user_id DROP NOT NULL;
 ALTER TABLE cameras ADD COLUMN IF NOT EXISTS health_status TEXT NOT NULL DEFAULT 'unknown';

@@ -38,6 +38,7 @@ import { registerEvidenceRoutes } from "./evidence-routes.ts";
 import { evidenceService } from "./evidence.ts";
 import type { IntegrationConfig } from "./integrations.ts";
 import { buildRoutes, streets } from "./routing.ts";
+import { captureCenter, routeLength } from "../shared/route-edit.ts";
 import { suggestCameras, suggestionInput } from "./suggestions.ts";
 
 declare module "fastify" {
@@ -575,7 +576,7 @@ export async function createApp(
   });
   async function detail(caseId: string, user: User, reader: DB = db) {
     const c = await access(reader, caseId, user);
-    const [targets, entries, history, attachments, routeNotes] =
+    const [targets, entries, history, attachments, routeNotes, routeOverrides] =
       await Promise.all([
         reader.query(
           "SELECT * FROM targets WHERE case_id=$1 ORDER BY description",
@@ -597,21 +598,196 @@ export async function createApp(
           "SELECT n.*,u.name AS author FROM route_notes n JOIN users u ON u.id=n.user_id WHERE n.case_id=$1 ORDER BY n.created_at",
           [caseId],
         ),
+        reader.query("SELECT * FROM route_overrides WHERE case_id=$1", [
+          caseId,
+        ]),
       ]);
+    const routes = buildRoutes(
+      targets.rows,
+      entries.rows,
+      routeNotes.rows,
+      routeOverrides.rows,
+    );
+    const inactiveRouteEdits = routeOverrides.rows.filter(
+      (o) =>
+        (o.coordinates || o.line_style !== "dashed" || o.note) &&
+        !routes.some(
+          (r) =>
+            r.target_id === o.target_id &&
+            r.legs.some(
+              (l) => l.from === o.from_entry_id && l.to === o.to_entry_id,
+            ),
+        ),
+    ).length;
     return {
       ...c,
       number: String(c.number),
+      inactive_route_edits: inactiveRouteEdits,
       targets: targets.rows,
       entries: entries.rows,
       history: history.rows,
       attachments: attachments.rows,
       route_notes: routeNotes.rows,
-      routes: buildRoutes(targets.rows, entries.rows, routeNotes.rows),
+      routes,
     };
   }
   app.get("/api/cases/:id", async (req) =>
     detail((req.params as any).id, req.user),
   );
+  app.patch("/api/cases/:id/title", async (req) => {
+    const caseId = (req.params as any).id;
+    const input = z
+      .object({ title: text.max(180), previous_title: text.max(180) })
+      .parse(req.body);
+    await db.transaction(async (tx) => {
+      const c = await access(tx, caseId, req.user, true);
+      if (
+        !isStaff(req.user) &&
+        !(c.status === "pedida" && c.requester_id === req.user.id)
+      )
+        fail(
+          403,
+          "Sólo la sala o el solicitante de un pedido pendiente pueden corregir el título.",
+        );
+      if (c.title !== input.previous_title)
+        fail(
+          409,
+          "El título cambió mientras lo editabas. Cerrá y volvé a abrir la edición.",
+        );
+      if (c.title === input.title) return;
+      await tx.query("UPDATE cases SET title=$1,updated_at=now() WHERE id=$2", [
+        input.title,
+        caseId,
+      ]);
+      await audit(tx, req.user, caseId, "title_updated", {
+        from: c.title,
+        to: input.title,
+      });
+    });
+    changed(caseId);
+    return { ok: true };
+  });
+  app.put("/api/cases/:id/route", async (req) => {
+    const caseId = (req.params as any).id;
+    const point = z.tuple([
+      z.number().min(-180).max(180),
+      z.number().min(-85).max(85),
+    ]);
+    const input = z
+      .object({
+        target_id: id,
+        from_entry_id: id,
+        to_entry_id: id,
+        coordinates: z.array(point).min(2).max(5000).nullable(),
+        line_style: z.enum(["solid", "dashed", "dotted", "hidden"]),
+        note: z.string().trim().max(2000).default(""),
+        version: z.number().int().min(0),
+        reset: z.boolean().default(false),
+      })
+      .parse(req.body);
+    await db.transaction(async (tx) => {
+      const c = await access(tx, caseId, req.user, true);
+      if (!isStaff(req.user))
+        fail(403, "Sólo la sala puede editar recorridos.");
+      if (c.status !== "en_curso")
+        fail(409, "Reabrí la búsqueda para editar el recorrido.");
+      const targets = (
+        await tx.query("SELECT * FROM targets WHERE id=$1 AND case_id=$2", [
+          input.target_id,
+          caseId,
+        ])
+      ).rows;
+      const entries = (
+        await tx.query(
+          "SELECT * FROM entries WHERE case_id=$1 AND deleted_at IS NULL",
+          [caseId],
+        )
+      ).rows;
+      const notes = (
+        await tx.query(
+          "SELECT * FROM route_notes WHERE case_id=$1 AND active=true",
+          [caseId],
+        )
+      ).rows;
+      const leg = buildRoutes(targets, entries, notes)[0]?.legs.find(
+        (l) => l.from === input.from_entry_id && l.to === input.to_entry_id,
+      );
+      if (!leg)
+        fail(
+          409,
+          "El tramo ya no une dos capturas consecutivas de ese objetivo. Volvé a abrir el editor.",
+        );
+      if (leg.uncertain)
+        fail(
+          409,
+          "Quitá la anotación de incertidumbre antes de trazar ese tramo.",
+        );
+      const keys = [
+        caseId,
+        input.target_id,
+        input.from_entry_id,
+        input.to_entry_id,
+      ];
+      const previous = (
+        await tx.query(
+          "SELECT * FROM route_overrides WHERE case_id=$1 AND target_id=$2 AND from_entry_id=$3 AND to_entry_id=$4",
+          keys,
+        )
+      ).rows[0];
+      if ((previous?.version || 0) !== input.version)
+        fail(
+          409,
+          "Otro operador cambió el tramo. Cerrá y volvé a abrir el editor.",
+        );
+      if (input.coordinates) {
+        const start = captureCenter(
+          entries.find((e) => e.id === input.from_entry_id),
+        );
+        const end = captureCenter(
+          entries.find((e) => e.id === input.to_entry_id),
+        );
+        if (
+          routeLength([start, input.coordinates[0]]) > 2 ||
+          routeLength([end, input.coordinates.at(-1)!]) > 2
+        )
+          fail(400, "Los extremos deben coincidir con las capturas.");
+        input.coordinates[0] = start;
+        input.coordinates[input.coordinates.length - 1] = end;
+        if (routeLength(input.coordinates) > 200000)
+          fail(400, "El tramo supera 200 km. Revisá los puntos dibujados.");
+      }
+      // Reset keeps a version tombstone so concurrent editors cannot overwrite a newer reset.
+      const next = {
+        coordinates: input.reset ? null : input.coordinates,
+        line_style: input.reset ? "dashed" : input.line_style,
+        note: input.reset ? "" : input.note,
+      };
+      await tx.query(
+        `INSERT INTO route_overrides(case_id,target_id,from_entry_id,to_entry_id,coordinates,line_style,note,user_id,version)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(case_id,target_id,from_entry_id,to_entry_id)
+        DO UPDATE SET coordinates=excluded.coordinates,line_style=excluded.line_style,note=excluded.note,user_id=excluded.user_id,version=excluded.version,updated_at=now()`,
+        [
+          ...keys,
+          next.coordinates ? JSON.stringify(next.coordinates) : null,
+          next.line_style,
+          next.note,
+          req.user.id,
+          input.version + 1,
+        ],
+      );
+      await audit(tx, req.user, caseId, "route_updated", {
+        target_id: input.target_id,
+        from_entry_id: input.from_entry_id,
+        to_entry_id: input.to_entry_id,
+        previous: previous || null,
+        next,
+        reset: input.reset,
+      });
+      await tx.query("UPDATE cases SET updated_at=now() WHERE id=$1", [caseId]);
+    });
+    changed(caseId);
+    return { ok: true };
+  });
   app.get("/api/cases/:id/report", async (req) => {
     const snapshot = await db.transaction(async (tx) => {
       await tx.query(
@@ -1197,10 +1373,10 @@ export async function createApp(
     );
     const lines = c.routes.flatMap((r) =>
       r.legs
-        .filter((l) => l.coordinates.length > 1)
+        .filter((l) => l.coordinates.length > 1 && l.line_style !== "hidden")
         .map(
           (l) =>
-            `<Placemark><name>${xml(r.description)} · recorrido probable</name><LineString><coordinates>${l.coordinates.map((p) => `${p[0]},${p[1]},0`).join(" ")}</coordinates></LineString></Placemark>`,
+            `<Placemark><name>${xml(r.description)} · ${l.manual ? "trazado manual" : "recorrido estimado"}</name><description>${xml(l.route_note || "")} · Estilo: ${xml(l.line_style || "dashed")} (KML no representa guiones)</description><LineString><coordinates>${l.coordinates.map((p) => `${p[0]},${p[1]},0`).join(" ")}</coordinates></LineString></Placemark>`,
         ),
     );
     const places = c.entries

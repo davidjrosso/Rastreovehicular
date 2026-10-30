@@ -36,6 +36,8 @@ import { RecordingPanel } from "./Recordings";
 import { Reports } from "./Reports";
 import { HikEvidence } from "./HikEvidence";
 import { EvidenceSource } from "./evidence-source";
+import { RouteEditor } from "./RouteEditor";
+import { lineStyles } from "../shared/route-edit";
 import "./style.css";
 
 type Row = Record<string, any>;
@@ -846,6 +848,8 @@ function CaseDetail({
     [deleting, setDeleting] = useState<Row | null>(null);
   const [attachmentEntry, setAttachmentEntry] = useState<string | null>(null);
   const [hikEvidence, setHikEvidence] = useState<Row | null>(null);
+  const [pathEdit, setPathEdit] = useState<Row | null>(null);
+  const [titleEdit, setTitleEdit] = useState<string | null>(null);
   const [routeEdit, setRouteEdit] = useState<Row | null>(null);
   const [removeNote, setRemoveNote] = useState<Row | null>(null);
   const [suggestions, setSuggestions] = useState<Row[]>([]);
@@ -953,6 +957,47 @@ function CaseDetail({
   };
   return (
     <div className="case-detail">
+      {pathEdit && (
+        <RouteEditor
+          detail={c}
+          route={pathEdit.route}
+          leg={pathEdit.leg}
+          close={() => setPathEdit(null)}
+          saved={() => void refresh()}
+        />
+      )}
+      {titleEdit !== null && (
+        <Modal
+          title="Corregir título de la búsqueda"
+          close={() => setTitleEdit(null)}
+        >
+          <Form
+            submit={(f) =>
+              api(`/cases/${caseId}/title`, "PATCH", {
+                title: f.get("title"),
+                previous_title: titleEdit,
+              })
+            }
+            onDone={() => {
+              setTitleEdit(null);
+              void refresh();
+            }}
+          >
+            <Field label="Título">
+              <input
+                name="title"
+                defaultValue={titleEdit}
+                required
+                maxLength={180}
+                autoFocus
+              />
+            </Field>
+            <p className="muted">
+              Se conserva el título anterior en el historial.
+            </p>
+          </Form>
+        </Modal>
+      )}
       {hikEvidence && (
         <HikEvidence
           detail={c}
@@ -973,6 +1018,12 @@ function CaseDetail({
             <Status status={c.status} />
           </div>
           <h1>{c.title}</h1>
+          {(staff(user) ||
+            (c.status === "pedida" && c.requester_id === user.id)) && (
+            <button className="secondary" onClick={() => setTitleEdit(c.title)}>
+              Editar título
+            </button>
+          )}
           <p>
             {c.reference ? `Expediente ${c.reference} · ` : ""}
             {fmt(c.starts_at)} — {fmt(c.ends_at)}
@@ -1135,6 +1186,13 @@ function CaseDetail({
               )),
           )}
           <div className="route-legs">
+            {!!c.inactive_route_edits && (
+              <p className="route-notice">
+                Hay {c.inactive_route_edits} edición(es) de tramos anteriores
+                que dejaron de unir capturas consecutivas. Se conservan en el
+                historial; revisá los nuevos tramos.
+              </p>
+            )}
             {c.routes.flatMap((r: Row) =>
               r.legs.map((leg: Row) => {
                 const from = c.entries.find((e: Row) => e.id === leg.from);
@@ -1162,6 +1220,29 @@ function CaseDetail({
                         ? ` · Distancia estimada: ${(leg.distance / 1000).toFixed(2)} km`
                         : ""}
                     </p>
+                    {!leg.uncertain && (
+                      <p className="muted">
+                        {leg.manual
+                          ? "Trazado manual del operador"
+                          : "Recorrido calculado"}{" "}
+                        ·{" "}
+                        {
+                          lineStyles[
+                            (leg.line_style ||
+                              "dashed") as keyof typeof lineStyles
+                          ]
+                        }
+                        {leg.route_note ? ` · ${leg.route_note}` : ""}
+                      </p>
+                    )}
+                    {!leg.uncertain && staff(user) && working && (
+                      <button
+                        className="secondary"
+                        onClick={() => setPathEdit({ route: r, leg })}
+                      >
+                        Editar trazado y línea
+                      </button>
+                    )}
                     {leg.uncertain ? (
                       <>
                         <b>Recorrido incierto · sin trazar en el mapa</b>
@@ -1286,14 +1367,30 @@ function CaseDetail({
                                 ? "Tramo marcado como incierto"
                                 : h.action === "route_uncertainty_removed"
                                   ? "Incertidumbre del tramo retirada"
-                                  : h.action
-                                      .replace("_created", " agregado")
-                                      .replace("captura", "Captura")
-                                      .replace("revision", "Revisión")
-                                      .replace("mensaje", "Mensaje")
-                                      .replace("aporte", "Aporte")}
+                                  : h.action === "title_updated"
+                                    ? "Título corregido"
+                                    : h.action === "route_updated"
+                                      ? "Trazado o estilo del tramo modificado"
+                                      : h.action
+                                          .replace("_created", " agregado")
+                                          .replace("captura", "Captura")
+                                          .replace("revision", "Revisión")
+                                          .replace("mensaje", "Mensaje")
+                                          .replace("aporte", "Aporte")}
                   </strong>
                   {h.detail.observation && <p>{h.detail.observation}</p>}
+                  {h.action === "title_updated" && (
+                    <p>
+                      {h.detail.from} → {h.detail.to}
+                    </p>
+                  )}
+                  {h.action === "route_updated" && (
+                    <p>
+                      {h.detail.reset
+                        ? "Se restableció el cálculo automático."
+                        : `${h.detail.next.coordinates ? "Trazado manual" : "Trazado automático"} · ${lineStyles[h.detail.next.line_style as keyof typeof lineStyles]} · ${h.detail.next.note}`}
+                    </p>
+                  )}
                   {h.detail.reason && <p>{h.detail.reason}</p>}
                   <small>
                     {h.author} · {fmt(h.created_at)}
