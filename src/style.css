@@ -2458,3 +2458,18 @@ input[type="color"] {
     height: 20px;
   }
 }
+.case-period-fields {
+  grid-column: 1/-1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+  min-width: 0;
+}
+.case-period-fields > legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+.case-period-fields > .datetime-field {
+  margin-top: 12px;
+}

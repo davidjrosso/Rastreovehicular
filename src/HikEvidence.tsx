@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, fmt, iso, localTime } from "./api";
+import { suggestedWindow, periodBounds } from "../shared/case-period";
 import { CameraPicker, DateTimeField } from "./inputs";
 import { EvidenceSource } from "./evidence-source";
 import "./hik-evidence.css";
@@ -56,6 +57,10 @@ export function HikEvidence({
   }
   const base = `/cases/${detail.id}`;
   const working = detail.status === "en_curso";
+  const window = suggestedWindow(detail, detail.ends_at ? 31 * 24 : 24);
+  const latest = localTime(
+    new Date(Math.min(periodBounds(detail).to, Date.now())).toISOString(),
+  );
   return (
     <dialog
       className="hik-dialog"
@@ -241,22 +246,18 @@ export function HikEvidence({
               <DateTimeField
                 name="from"
                 label="Desde"
-                initial={localTime(detail.starts_at)}
+                initial={localTime(window.from)}
                 required
                 min={localTime(detail.starts_at)}
-                max={localTime(detail.ends_at)}
+                max={latest}
               />
               <DateTimeField
                 name="to"
                 label="Hasta"
-                initial={localTime(
-                  new Date(
-                    Math.min(new Date(detail.ends_at).getTime(), Date.now()),
-                  ).toISOString(),
-                )}
+                initial={localTime(window.to)}
                 required
                 min={localTime(detail.starts_at)}
-                max={localTime(detail.ends_at)}
+                max={latest}
               />
               <button type="submit" className="primary">
                 Buscar en HikCentral

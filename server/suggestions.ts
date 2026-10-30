@@ -126,7 +126,7 @@ export function suggestCameras(
         "La última captura está fuera de la cobertura del mapa de calles. Revisá su ubicación antes de calcular sugerencias.",
     };
   const end = Math.min(
-    new Date(c.ends_at).getTime(),
+    c.ends_at ? new Date(c.ends_at).getTime() : Infinity,
     start + options.horizon_minutes * 60000,
   );
   if (end <= start)

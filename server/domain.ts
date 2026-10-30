@@ -26,19 +26,32 @@ export const isSupervisor = (u: User) =>
 export function fail(statusCode: number, message: string): never {
   throw Object.assign(new Error(message), { statusCode });
 }
+const periodFields = {
+  starts_at: date.nullable().default(null),
+  ends_at: date.nullable().default(null),
+};
+const validPeriod = (v: { starts_at: string | null; ends_at: string | null }) =>
+  !v.ends_at ||
+  (!!v.starts_at && Date.parse(v.starts_at) <= Date.parse(v.ends_at));
+export const periodInput = z
+  .object({
+    ...periodFields,
+    previous_starts_at: date.nullable(),
+    previous_ends_at: date.nullable(),
+  })
+  .refine(
+    validPeriod,
+    "Indicá un inicio anterior al final, o dejá la búsqueda abierta.",
+  );
 export const caseInput = z
   .object({
     title: text.max(180),
     description: text,
     reference: z.string().trim().max(200).default(""),
     department_id: id,
-    starts_at: date,
-    ends_at: date,
+    ...periodFields,
   })
-  .refine(
-    (v) => Date.parse(v.starts_at) <= Date.parse(v.ends_at),
-    "La franja horaria está invertida",
-  );
+  .refine(validPeriod, "La franja horaria está invertida");
 export const targetInput = z.object({
   kind: z.enum(["vehiculo", "persona", "otro"]),
   description: text.max(500),

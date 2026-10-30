@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS cases (
   CHECK (ends_at >= starts_at)
 );
 CREATE INDEX IF NOT EXISTS cases_department ON cases(department_id);
+ALTER TABLE cases ALTER COLUMN starts_at DROP NOT NULL;
+ALTER TABLE cases ALTER COLUMN ends_at DROP NOT NULL;
+ALTER TABLE cases DROP CONSTRAINT IF EXISTS cases_period_shape;
+ALTER TABLE cases ADD CONSTRAINT cases_period_shape CHECK (ends_at IS NULL OR starts_at IS NOT NULL);
 CREATE TABLE IF NOT EXISTS targets (
   id UUID PRIMARY KEY, case_id UUID NOT NULL REFERENCES cases(id),
   kind TEXT NOT NULL CHECK (kind IN ('vehiculo','persona','otro')),

@@ -26,7 +26,9 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { api, fmt, iso, localTime, roles, states } from "./api";
+import { api, fmt, iso, localTime, roles, states, periodLabel } from "./api";
+import { CasePeriodFields, periodForm } from "./CasePeriodFields";
+import { suggestedWindow } from "../shared/case-period";
 import { CityMap } from "./Map";
 import { CameraPicker, DateTimeField, PlaceFields } from "./inputs";
 import { Suggestions } from "./Suggestions";
@@ -630,7 +632,7 @@ function App() {
                           </span>
                           <span>
                             <Clock3 size={14} />
-                            {fmt(c.starts_at)}
+                            {periodLabel(c)}
                           </span>
                         </div>
                         <div className="card-bottom">
@@ -760,8 +762,7 @@ function App() {
                 description: formValue(f, "description"),
                 reference: formValue(f, "reference"),
                 department_id: formValue(f, "department_id"),
-                starts_at: iso(f.get("starts_at")),
-                ends_at: iso(f.get("ends_at")),
+                ...periodForm(f),
               });
               setSelected(c.id);
             }}
@@ -806,16 +807,7 @@ function App() {
                   maxLength={200}
                 />
               </Field>
-              <DateTimeField
-                name="starts_at"
-                label="Desde (hora argentina)"
-                required
-              />
-              <DateTimeField
-                name="ends_at"
-                label="Hasta (hora argentina)"
-                required
-              />
+              <CasePeriodFields />
             </div>
           </Form>
         </Modal>
@@ -850,6 +842,7 @@ function CaseDetail({
   const [hikEvidence, setHikEvidence] = useState<Row | null>(null);
   const [pathEdit, setPathEdit] = useState<Row | null>(null);
   const [titleEdit, setTitleEdit] = useState<string | null>(null);
+  const [periodEdit, setPeriodEdit] = useState<Row | null>(null);
   const [routeEdit, setRouteEdit] = useState<Row | null>(null);
   const [removeNote, setRemoveNote] = useState<Row | null>(null);
   const [suggestions, setSuggestions] = useState<Row[]>([]);
@@ -957,6 +950,32 @@ function CaseDetail({
   };
   return (
     <div className="case-detail">
+      {periodEdit && (
+        <Modal
+          title="Editar fecha de la búsqueda"
+          close={() => setPeriodEdit(null)}
+        >
+          <Form
+            submit={(f) =>
+              api(`/cases/${caseId}/period`, "PATCH", {
+                ...periodForm(f),
+                previous_starts_at: periodEdit.starts_at,
+                previous_ends_at: periodEdit.ends_at,
+              })
+            }
+            onDone={() => {
+              setPeriodEdit(null);
+              void refresh();
+            }}
+          >
+            <CasePeriodFields initial={periodEdit} />
+            <p className="muted">
+              Cambiar las fechas no cierra ni reabre el pedido. Se conserva el
+              historial y no se permite dejar registros fuera del nuevo período.
+            </p>
+          </Form>
+        </Modal>
+      )}
       {pathEdit && (
         <RouteEditor
           detail={c}
@@ -1026,8 +1045,19 @@ function CaseDetail({
           )}
           <p>
             {c.reference ? `Expediente ${c.reference} · ` : ""}
-            {fmt(c.starts_at)} — {fmt(c.ends_at)}
+            {periodLabel(c)}
           </p>
+          {(staff(user) ||
+            (c.status === "pedida" && c.requester_id === user.id)) && (
+            <button
+              className="secondary"
+              onClick={() =>
+                setPeriodEdit({ starts_at: c.starts_at, ends_at: c.ends_at })
+              }
+            >
+              Editar fecha / búsqueda abierta
+            </button>
+          )}
         </div>
         <div className="action-row">
           {available.map((s) => (
@@ -1367,18 +1397,26 @@ function CaseDetail({
                                 ? "Tramo marcado como incierto"
                                 : h.action === "route_uncertainty_removed"
                                   ? "Incertidumbre del tramo retirada"
-                                  : h.action === "title_updated"
-                                    ? "Título corregido"
-                                    : h.action === "route_updated"
-                                      ? "Trazado o estilo del tramo modificado"
-                                      : h.action
-                                          .replace("_created", " agregado")
-                                          .replace("captura", "Captura")
-                                          .replace("revision", "Revisión")
-                                          .replace("mensaje", "Mensaje")
-                                          .replace("aporte", "Aporte")}
+                                  : h.action === "period_updated"
+                                    ? "Fecha o modalidad de búsqueda modificada"
+                                    : h.action === "title_updated"
+                                      ? "Título corregido"
+                                      : h.action === "route_updated"
+                                        ? "Trazado o estilo del tramo modificado"
+                                        : h.action
+                                            .replace("_created", " agregado")
+                                            .replace("captura", "Captura")
+                                            .replace("revision", "Revisión")
+                                            .replace("mensaje", "Mensaje")
+                                            .replace("aporte", "Aporte")}
                   </strong>
                   {h.detail.observation && <p>{h.detail.observation}</p>}
+                  {h.action === "period_updated" && (
+                    <p>
+                      {periodLabel(h.detail.previous)} →{" "}
+                      {periodLabel(h.detail.next)}
+                    </p>
+                  )}
                   {h.action === "title_updated" && (
                     <p>
                       {h.detail.from} → {h.detail.to}
@@ -1841,9 +1879,12 @@ function CaseDetail({
                     label="Fecha y hora (Argentina)"
                     name="at"
                     required
-                    initial={localTime(suggestionPrefill?.at || c.starts_at)}
+                    initial={localTime(
+                      suggestionPrefill?.at ||
+                        (c.ends_at ? c.starts_at : new Date().toISOString()),
+                    )}
                     min={localTime(c.starts_at)}
-                    max={localTime(c.ends_at)}
+                    max={localTime(c.ends_at || new Date().toISOString())}
                   />
                   <Field label="Certeza">
                     <select name="certainty">
@@ -1899,17 +1940,21 @@ function CaseDetail({
                     name="from"
                     label="Revisada desde (Argentina)"
                     required
-                    initial={localTime(suggestionPrefill?.from || c.starts_at)}
+                    initial={localTime(
+                      suggestionPrefill?.from || suggestedWindow(c).from,
+                    )}
                     min={localTime(c.starts_at)}
-                    max={localTime(c.ends_at)}
+                    max={localTime(c.ends_at || new Date().toISOString())}
                   />
                   <DateTimeField
                     name="to"
                     label="Hasta (Argentina)"
                     required
-                    initial={localTime(suggestionPrefill?.to || c.ends_at)}
+                    initial={localTime(
+                      suggestionPrefill?.to || suggestedWindow(c).to,
+                    )}
                     min={localTime(c.starts_at)}
-                    max={localTime(c.ends_at)}
+                    max={localTime(c.ends_at || new Date().toISOString())}
                   />
                 </div>
               </>

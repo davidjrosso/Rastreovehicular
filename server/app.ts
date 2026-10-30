@@ -20,6 +20,7 @@ import {
   roles,
   states,
   caseInput,
+  periodInput,
   targetInput,
   entryInputs,
   canTransition,
@@ -39,6 +40,7 @@ import { evidenceService } from "./evidence.ts";
 import type { IntegrationConfig } from "./integrations.ts";
 import { buildRoutes, streets } from "./routing.ts";
 import { captureCenter, routeLength } from "../shared/route-edit.ts";
+import { withinCasePeriod, periodBounds } from "../shared/case-period.ts";
 import { suggestCameras, suggestionInput } from "./suggestions.ts";
 
 declare module "fastify" {
@@ -667,6 +669,58 @@ export async function createApp(
     changed(caseId);
     return { ok: true };
   });
+  app.patch("/api/cases/:id/period", async (req) => {
+    const caseId = (req.params as any).id,
+      input = periodInput.parse(req.body);
+    await db.transaction(async (tx) => {
+      const c = await access(tx, caseId, req.user, true);
+      if (
+        !isStaff(req.user) &&
+        !(c.status === "pedida" && c.requester_id === req.user.id)
+      )
+        fail(
+          403,
+          "Sólo la sala o el solicitante de un pedido pendiente pueden cambiar el período.",
+        );
+      const old = periodBounds(c),
+        expected = periodBounds({
+          starts_at: input.previous_starts_at,
+          ends_at: input.previous_ends_at,
+        });
+      if (old.from !== expected.from || old.to !== expected.to)
+        fail(
+          409,
+          "El período cambió mientras lo editabas. Cerrá y volvé a abrir la edición.",
+        );
+      const entries = (
+        await tx.query(
+          "SELECT kind,payload FROM entries WHERE case_id=$1 AND deleted_at IS NULL",
+          [caseId],
+        )
+      ).rows;
+      if (
+        entries.some((e) =>
+          e.kind === "revision"
+            ? !withinCasePeriod(input, e.payload.from, e.payload.to)
+            : e.payload.at && !withinCasePeriod(input, e.payload.at),
+        )
+      )
+        fail(
+          409,
+          "El nuevo período dejaría registros existentes fuera de la búsqueda. Ampliá las fechas o dejalas abiertas.",
+        );
+      await tx.query(
+        "UPDATE cases SET starts_at=$1,ends_at=$2,updated_at=now() WHERE id=$3",
+        [input.starts_at, input.ends_at, caseId],
+      );
+      await audit(tx, req.user, caseId, "period_updated", {
+        previous: { starts_at: c.starts_at, ends_at: c.ends_at },
+        next: { starts_at: input.starts_at, ends_at: input.ends_at },
+      });
+    });
+    changed(caseId);
+    return { ok: true };
+  });
   app.put("/api/cases/:id/route", async (req) => {
     const caseId = (req.params as any).id;
     const point = z.tuple([
@@ -855,13 +909,7 @@ export async function createApp(
       if (!isStaff(req.user))
         fail(403, "La consulta de grabaciones es para la sala.");
       const { queries } = recordingInput.parse(req.body);
-      if (
-        queries.some(
-          (q) =>
-            Date.parse(q.from) < new Date(c.starts_at).getTime() ||
-            Date.parse(q.to) > new Date(c.ends_at).getTime(),
-        )
-      )
+      if (queries.some((q) => !withinCasePeriod(c, q.from, q.to)))
         fail(400, "La consulta debe estar dentro de la franja del pedido.");
       const cameras = (
         await db.query(
@@ -1104,8 +1152,8 @@ export async function createApp(
       }
       if (kind === "captura") {
         if (
-          Date.parse(input.at) < new Date(c.starts_at).getTime() ||
-          Date.parse(input.at) > new Date(c.ends_at).getTime()
+          !withinCasePeriod(c, input.at) ||
+          (!c.ends_at && Date.parse(input.at) > Date.now())
         )
           fail(400, "La captura debe estar dentro de la franja del pedido");
         input.target_ids = [...new Set(input.target_ids)];

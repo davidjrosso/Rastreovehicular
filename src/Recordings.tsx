@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, fmt, iso, localTime } from "./api";
+import { periodBounds, suggestedWindow } from "../shared/case-period";
 import { CameraPicker, DateTimeField } from "./inputs";
 import { CameraHealth } from "./CameraHealth";
 import {
@@ -149,8 +150,11 @@ export function RecordingPanel({
     },
     [],
   );
-  const max = localTime(detail.ends_at),
-    min = localTime(detail.starts_at);
+  const max = localTime(
+      new Date(Math.min(periodBounds(detail).to, Date.now())).toISOString(),
+    ),
+    min = localTime(detail.starts_at),
+    window = suggestedWindow(detail, detail.ends_at ? 72 : 24);
   return (
     <section
       className="admin-panel recording-panel"
@@ -203,21 +207,16 @@ export function RecordingPanel({
         <DateTimeField
           name="recording_from"
           label="Desde"
-          initial={min}
+          initial={localTime(window.from)}
+          required
           min={min}
           max={max}
         />
         <DateTimeField
           name="recording_to"
           label="Hasta"
-          initial={localTime(
-            new Date(
-              Math.min(
-                Date.parse(detail.ends_at),
-                Date.parse(detail.starts_at) + 72 * 3600000,
-              ),
-            ).toISOString(),
-          )}
+          initial={localTime(window.to)}
+          required
           min={min}
           max={max}
         />

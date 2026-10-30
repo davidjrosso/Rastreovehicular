@@ -54,17 +54,19 @@ export const roles: Record<string, string> = {
   operador: "Operador",
   externo: "Externo",
 };
-export const fmt = (value: string) =>
-  new Intl.DateTimeFormat("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-    timeZone: "America/Argentina/Cordoba",
-  }).format(new Date(value));
+export const fmt = (value: string | null | undefined) =>
+  !value
+    ? "Sin fecha"
+    : new Intl.DateTimeFormat("es-AR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+        timeZone: "America/Argentina/Cordoba",
+      }).format(new Date(value));
 export const time = (value: string) =>
   new Intl.DateTimeFormat("es-AR", {
     hour: "2-digit",
@@ -75,7 +77,17 @@ export const time = (value: string) =>
   }).format(new Date(value));
 export const iso = (local: FormDataEntryValue | null) =>
   new Date(`${local}-03:00`).toISOString();
-export const localTime = (s: string) => {
+export const localTime = (s: string | null | undefined) => {
+  if (!s) return "";
   const d = new Date(new Date(s).getTime() - 3 * 3600000);
   return d.toISOString().slice(0, 19);
 };
+export const periodLabel = (c: {
+  starts_at?: string | null;
+  ends_at?: string | null;
+}) =>
+  !c.starts_at
+    ? "Sin fecha definida"
+    : !c.ends_at
+      ? `Desde ${fmt(c.starts_at)} · sin fecha de cierre`
+      : `${fmt(c.starts_at)} — ${fmt(c.ends_at)}`;

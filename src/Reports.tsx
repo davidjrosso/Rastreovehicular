@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-import { api, fmt, states } from "./api";
+import { api, fmt, states, periodLabel } from "./api";
 import { reportModel, certaintyLabels } from "./report-model";
 import { ReportMap } from "./ReportMap";
 import { EvidenceSource } from "./evidence-source";
@@ -134,7 +134,7 @@ export function Reports({
                   <i />
                   {states[c.status]}
                 </span>
-                <small>{fmt(c.starts_at)}</small>
+                <small>{periodLabel(c)}</small>
                 <span>{c.capture_count} capturas registradas</span>
               </div>
               <span className="report-list-action">
@@ -390,9 +390,7 @@ function SituationReport({
               <div className="report-dates">
                 <div>
                   <span>PERÍODO DEL EVENTO · HORA ARGENTINA</span>
-                  <b>
-                    {fmt(data.starts_at)} — {fmt(data.ends_at)}
-                  </b>
+                  <b>{periodLabel(data)}</b>
                 </div>
                 <div>
                   <span>FECHA DE CORTE</span>

@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import type { DB } from "./db.ts";
 import { fail, id, isStaff, type User } from "./domain.ts";
+import { withinCasePeriod, periodBounds } from "../shared/case-period.ts";
 import { IntegrationError, type IntegrationConfig } from "./integrations.ts";
 import {
   evidenceService,
@@ -83,11 +84,7 @@ export function registerEvidenceRoutes(app: FastifyInstance, ctx: Context) {
     }
   }
   function within(c: any, from: string, to = from) {
-    if (
-      Date.parse(from) < new Date(c.starts_at).getTime() ||
-      Date.parse(to) > new Date(c.ends_at).getTime() ||
-      Date.parse(to) > Date.now()
-    )
+    if (!withinCasePeriod(c, from, to) || Date.parse(to) > Date.now())
       fail(
         400,
         "La consulta debe estar dentro del período del pedido y no incluir horas futuras.",
@@ -342,11 +339,7 @@ export function registerEvidenceRoutes(app: FastifyInstance, ctx: Context) {
         input.offset_seconds * 1000,
     ).toISOString();
     const end = new Date(
-      Math.min(
-        Date.parse(at) + 6000,
-        new Date(c.ends_at).getTime(),
-        Date.now(),
-      ),
+      Math.min(Date.parse(at) + 6000, periodBounds(c).to, Date.now()),
     ).toISOString();
     within(c, at, end);
     if (Date.parse(end) - Date.parse(at) < 1000)
